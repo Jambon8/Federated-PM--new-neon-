@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon & Xenon | Secure Process Mining</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code&display=swap"
+        rel="stylesheet">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <!-- Optional for icons, using unicode fallback if needed -->
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Secure Process Mining</h1>
+            <p>Run privacy-preserving process discovery on distributed logs</p>
+        </header>
+
+        <!-- Configuration Section -->
+        <div class="card">
+            <h2>Configuration</h2>
+            <form id="runForm">
+                <div class="grid-2">
+                    <!-- Log Selection -->
+                    <div class="form-group">
+                        <label for="log_a">Log A (Party 0)</label>
+                        <div class="file-input-wrapper">
+                            <input type="text" id="log_a" name="log_a" placeholder="/path/to/log_a.xes" required
+                                autocomplete="off">
+                            <button type="button" class="btn" onclick="openBrowser('log_a')"
+                                style="margin-left: 0.5rem;">📂 Browse</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="log_b">Log B (Party 1)</label>
+                        <div class="file-input-wrapper">
+                            <input type="text" id="log_b" name="log_b" placeholder="/path/to/log_b.xes" required
+                                autocomplete="off">
+                            <button type="button" class="btn" onclick="openBrowser('log_b')"
+                                style="margin-left: 0.5rem;">📂 Browse</button>
+                        </div>
+                    </div>
+
+                    <!-- Parameters -->
+                    <div class="form-group">
+                        <label for="threshold">Filtering Threshold</label>
+                        <input type="number" id="threshold" name="threshold" value="1" min="1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="threads">Threads</label>
+                        <input type="number" id="threads" name="threads" value="16" min="1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="k_anon">K-Anonymity</label>
+                        <select id="k_anon" name="k_anon">
+                            <option value="0">Disabled (0)</option>
+                            <option value="1">Enabled (1)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="use_handovers" name="use_handovers" value="true"
+                                style="margin-right: 0.5rem; width: auto;">
+                            Only compute handover events (Fast Abstraction)
+                        </label>
+                    </div>
+
+                    <div class="form-group" style="grid-column: 1 / -1; margin-top: -10px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="is_ocel" name="is_ocel" value="true"
+                                style="margin-right: 0.5rem; width: auto;"
+                                onchange="document.getElementById('ocel_options').style.display = this.checked ? 'block' : 'none';">
+                            <strong>Use OCEL Pipeline (.json)</strong> — Approach 1 (Flatten on Target Object)
+                        </label>
+                        <div id="ocel_options" style="display: none; margin-top: 10px; margin-left: 25px;">
+                            <label for="flatten_type">Object Type to Flatten On:</label>
+                            <input type="text" id="flatten_type" name="flatten_type" value="Container"
+                                placeholder="e.g., Container, Handling Unit"
+                                style="width: 250px; padding: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius); background-color: var(--surface);">
+                        </div>
+                    </div>
+
+                    <!-- New: Mode and Network -->
+                    <div class="form-group">
+                        <label for="mode">Operation Mode</label>
+                        <select id="mode" name="mode" onchange="toggleNetwork()">
+                            <option value="local">Local</option>
+                            <option value="local-virtual">Local Virtual (Net Sim)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="network">Network Profile</label>
+                        <select id="network" name="network" disabled>
+                            <option value="unlimited">Unlimited (Localhost)</option>
+                            <option value="lan">LAN</option>
+                            <option value="wan-ent">WAN Enterprise</option>
+                            <option value="wan-fast">WAN Fast</option>
+                            <option value="wan-slow">WAN Slow</option>
+                            <option value="5g-avg">5G Average</option>
+                            <option value="5g-slow">5G Slow</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="runBtn">
+                    <span class="btn-text">Run Process Mining</span>
+                    <div class="spinner hidden" id="spinner"></div>
+                </button>
+            </form>
+
+            <div id="statusMessage" class="hidden"></div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden">
+
+            <!-- Live Output -->
+            <div class="card">
+                <h2>Execution Progress</h2>
+                <pre id="rawOutput"
+                    style="background: #000; padding: 1rem; overflow-x: auto; color: #fff; max-height: 300px; white-space: pre-wrap; font-family: 'Fira Code', monospace; font-size: 0.9em;"></pre>
+            </div>
+
+            <!-- Benchmarks -->
+            <div class="card hidden" id="finalResultsCard">
+                <h2>Benchmarks</h2>
+                <div class="benchmarks-grid" id="benchmarksGrid">
+                    <!-- Populated via JS -->
+                </div>
+
+                <details>
+                    <summary style="cursor: pointer; color: var(--accent);">Detailed Step Timings</summary>
+                    <div class="timings-list" id="timingsList"></div>
+                </details>
+            </div>
+
+            <!-- Traces -->
+            <div class="card hidden" id="tracesCard">
+                <h2>Discovered Traces</h2>
+                <div class="results-table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 100px;">Count</th>
+                                <th>Trace Variant</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- File Browser Modal -->
+    <div id="fileModal" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Select File</h3>
+                <button class="close-btn" onclick="closeBrowser()">×</button>
+            </div>
+            <div style="margin-bottom: 0.5rem; color: var(--text-secondary); font-size: 0.9em;" id="currentPathDisplay">
+            </div>
+            <div class="file-list" id="fileList">
+                <!-- Items -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+    <script>
+        // --- PARSER LOGIC in JS ---
+        function parseOutput(text, activityMap = {}) {
+            const lines = text.split('\n');
+
+            const benchmarks = {};
+            const stepNumData = {}; // Stores (time, data, rounds) from "Stopped timer X"
+            const namedTimerData = {}; // Stores time from "Timer NAME"
+
+            const results = [];
+            let currentTrace = [];
+            let currentCount = 0;
+            let inTrace = false;
+            let totalRounds = 0;
+
+            // Regex Patterns
+            const timePat = /Time = ([\d\.]+) seconds/;
+            const timerStopPat = /Stopped timer (\d+) at ([\d\.]+) \(([\d\.]+) MB, (\d+) rounds\)/;
+            const namedTimerPat = /Timer "([^"]+)" took on average ([\d\.]+) seconds/;
+            const dataPat = /Data sent = ([\d\.]+) MB/;
+            const globalPat = /Global data sent = ([\d\.]+) MB/;
+
+            // Trace Decoding Patterns
+            const startPat = /(?:INFO.*:\s*)?RAW_RESULT Count:\s*(\d+)\s*Trace:/;
+            const endPat = /(?:INFO.*:\s*)?END_TRACE/;
+            const othersPat = /(?:INFO.*:\s*)?Others count \(below threshold\):\s*(\d+)/;
+            const valuePat = /(?:INFO.*:\s*)?(\d+)\s*$/;
+
+            lines.forEach(line => {
+                line = line.trim();
+
+                // 1. Benchmarks & Timers
+                let m = line.match(timePat);
+                if (m) benchmarks['Total Time'] = m[1] + "s";
+
+                m = line.match(timerStopPat);
+                if (m) {
+                    // stepNumData[id] = { time, data, rounds }
+                    const rounds = parseInt(m[4]);
+                    stepNumData[m[1]] = { time: m[2] + "s", data: m[3] + " MB", rounds: rounds };
+                    totalRounds += rounds;
+                }
+
+                m = line.match(namedTimerPat);
+                if (m) namedTimerData[m[1]] = m[2] + "s";
+
+                m = line.match(dataPat);
+                if (m) benchmarks['Data Sent (Party 0)'] = m[1] + " MB";
+
+                m = line.match(globalPat);
+                if (m) benchmarks['Global Data Sent'] = m[1] + " MB";
+
+                // 2. Trace Results
+                m = line.match(startPat);
+                if (m) {
+                    currentCount = parseInt(m[1]);
+                    currentTrace = [];
+                    inTrace = true;
+                    return;
+                }
+
+                if (line.match(endPat)) {
+                    if (inTrace) {
+                        const readable = currentTrace
+                            .filter(id => id !== "0")
+                            .map(id => activityMap[id] || `Unknown(${id})`);
+                        results.push({ count: currentCount, trace: readable, type: 'trace' });
+                    }
+                    inTrace = false;
+                    return;
+                }
+
+                m = line.match(othersPat);
+                if (m) {
+                    results.push({ count: parseInt(m[1]), trace: ['<Others (Below Threshold)>'], type: 'others' });
+                    return;
+                }
+
+                if (inTrace) {
+                    m = line.match(valuePat);
+                    if (m) currentTrace.push(m[1]);
+                }
+            });
+
+            benchmarks['Total Rounds'] = totalRounds;
+
+            // Merge Steps
+            // Mapping: Step 1 -> TIMER_INPUTS, etc.
+            const stepMapping = {
+                '1': 'TIMER_INPUTS',
+                '2': 'TIMER_PSI',
+                '3': 'TIMER_RECON',
+                '4': 'TIMER_HASH',
+                '5': 'TIMER_GROUP',
+                '6': 'TIMER_OUTPUT'
+            };
+
+            const processedSteps = [];
+
+            // We iterate 1 through 6, or whatever we found
+            const allIds = new Set([...Object.keys(stepNumData)]);
+            // Ensure 1-6 are checked if they exist in named timers? 
+            // Actually usually we just check what we found.
+
+            // Let's iterate numerically sorted IDs from stepNumData
+            const sortedIds = Array.from(allIds).sort((a, b) => parseInt(a) - parseInt(b));
+
+            sortedIds.forEach(id => {
+                const numData = stepNumData[id];
+                const nameKey = stepMapping[id] || `Step ${id}`;
+                const namedTime = namedTimerData[nameKey];
+
+                // Prefer named time if available, else numbered time
+                const time = namedTime || numData.time;
+
+                processedSteps.push({
+                    name: nameKey,
+                    time: time,
+                    rounds: numData.rounds,
+                    data: numData.data
+                });
+            });
+
+            return { benchmarks, results, steps: processedSteps };
+        }
+
+        // Extract Activity Map
+        function extractMapFromOutput(text) {
+            const map = {};
+            const lines = text.split('\n');
+            const pat = /ID (\d+): '(.+)'/;
+            let inRing = false;
+            lines.forEach(line => {
+                if (line.includes("--- ACTIVITY DECODER RING ---")) inRing = true;
+                if (line.includes("-----------------------------")) inRing = false;
+                if (inRing) {
+                    const m = line.match(pat);
+                    if (m) map[m[1]] = m[2];
+                }
+            });
+            return map;
+        }
+
+        // --- UI Helpers ---
+        function toggleNetwork() {
+            const mode = document.getElementById('mode').value;
+            const net = document.getElementById('network');
+            net.disabled = (mode !== 'local-virtual');
+        }
+
+        // Browser Logic
+        let currentInputTarget = null;
+        async function openBrowser(inputId, path = null) {
+            currentInputTarget = inputId;
+            const modal = document.getElementById('fileModal');
+            modal.classList.remove('hidden');
+            if (!path) {
+                const currentVal = document.getElementById(inputId).value;
+                if (currentVal && currentVal.startsWith('/')) {
+                    path = currentVal.substring(0, currentVal.lastIndexOf('/'));
+                } else {
+                    // CHANGED DEFAULT PATH as requested
+                    path = "/home/jamil/Documents/Master_Input";
+                }
+            }
+            loadBrowserPath(path);
+        }
+
+        function closeBrowser() { document.getElementById('fileModal').classList.add('hidden'); }
+
+        async function loadBrowserPath(path) {
+            document.getElementById('currentPathDisplay').textContent = path;
+            const list = document.getElementById('fileList');
+            list.innerHTML = '<div style="color:var(--text-secondary)">Loading...</div>';
+            try {
+                const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+                const data = await res.json();
+                if (data.error) { list.innerHTML = `<div style="color:var(--error)">${data.error}</div>`; return; }
+                list.innerHTML = '';
+                data.items.forEach(item => {
+                    const el = document.createElement('div');
+                    el.className = 'file-item';
+                    const icon = item.type === 'directory' ? '📁' : '📄';
+                    el.innerHTML = `<span class="file-icon">${icon}</span><span class="file-name">${item.name}</span>`;
+                    el.onclick = () => {
+                        if (item.type === 'directory') loadBrowserPath(item.path);
+                        else { document.getElementById(currentInputTarget).value = item.path; closeBrowser(); }
+                    };
+                    list.appendChild(el);
+                });
+            } catch (e) { list.innerHTML = `<div style="color:var(--error)">Failed to load.</div>`; }
+        }
+
+        // Run Logic
+        document.getElementById('runForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('runBtn');
+            const spinner = document.getElementById('spinner');
+            const resultsSection = document.getElementById('resultsSection');
+            const rawOutput = document.getElementById('rawOutput');
+            const finalResultsCard = document.getElementById('finalResultsCard');
+            const tracesCard = document.getElementById('tracesCard');
+
+            document.getElementById('statusMessage').classList.add('hidden');
+            resultsSection.classList.remove('hidden');
+            finalResultsCard.classList.add('hidden');
+            tracesCard.classList.add('hidden');
+            rawOutput.textContent = "";
+            btn.disabled = true;
+            spinner.classList.remove('hidden');
+
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            data.threshold = parseInt(data.threshold);
+            data.threads = parseInt(data.threads);
+            data.k_anon = parseInt(data.k_anon);
+            data.use_handovers = document.getElementById('use_handovers').checked;
+            data.is_ocel = document.getElementById('is_ocel').checked;
+            data.flatten_type = document.getElementById('flatten_type').value;
+
+            try {
+                const response = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let aggregatedText = "";
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const text = decoder.decode(value);
+                    aggregatedText += text;
+                    rawOutput.textContent += text;
+                    rawOutput.scrollTop = rawOutput.scrollHeight;
+                }
+                spinner.classList.add('hidden');
+                btn.disabled = false;
+
+                // Parse & Render
+                const actMap = extractMapFromOutput(aggregatedText);
+                const parsed = parseOutput(aggregatedText, actMap);
+                renderResults(parsed);
+            } catch (err) {
+                rawOutput.textContent += `\n[Fatal Client Error]: ${err.message}`;
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        });
+
+        function renderResults(data) {
+            const finalResultsCard = document.getElementById('finalResultsCard');
+            const tracesCard = document.getElementById('tracesCard');
+            finalResultsCard.classList.remove('hidden');
+
+            // 1. Benchmarks
+            const grid = document.getElementById('benchmarksGrid');
+            grid.innerHTML = '';
+            // Updated keys as requested: Total Rounds instead of Data Sent
+            const keys = ['Total Time', 'Total Rounds', 'Global Data Sent'];
+            keys.forEach(k => {
+                if (data.benchmarks[k] !== undefined) {
+                    const item = document.createElement('div');
+                    item.className = 'benchmark-item';
+                    item.innerHTML = `<div class="benchmark-value">${data.benchmarks[k]}</div><div class="benchmark-label">${k}</div>`;
+                    grid.appendChild(item);
+                }
+            });
+
+            // Detailed Timings Table
+            const timingsList = document.getElementById('timingsList');
+            timingsList.innerHTML = '';
+
+            // Create Table Structure for Steps
+            if (data.steps && data.steps.length > 0) {
+                const table = document.createElement('table');
+                table.style.width = '100%';
+                table.style.marginTop = '1rem';
+                table.style.borderCollapse = 'collapse';
+                table.innerHTML = `
+                <thead>
+                    <tr style="text-align:left; border-bottom:1px solid var(--border);">
+                        <th style="padding:0.5rem;">Step Name</th>
+                        <th style="padding:0.5rem;">Runtime</th>
+                        <th style="padding:0.5rem;">Rounds</th>
+                        <th style="padding:0.5rem;">Data Sent</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+                const tbody = table.querySelector('tbody');
+
+                data.steps.forEach(t => {
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                    tr.innerHTML = `
+                    <td style="padding:0.5rem;">${t.name}</td>
+                    <td style="padding:0.5rem;">${t.time}</td>
+                    <td style="padding:0.5rem;">${t.rounds}</td>
+                    <td style="padding:0.5rem;">${t.data}</td>
+                `;
+                    tbody.appendChild(tr);
+                });
+                timingsList.appendChild(table);
+            }
+
+            if (data.results.length > 0) {
+                tracesCard.classList.remove('hidden');
+                renderTable(data.results);
+            }
+        }
+
+        // Sorting Logic
+        let currentResults = [];
+        let sortDir = 1;
+        function renderTable(results) {
+            currentResults = results;
+            const tbody = document.getElementById('resultsTableBody');
+            tbody.innerHTML = '';
+            results.forEach(r => {
+                const tr = document.createElement('tr');
+                const traceTd = document.createElement('td');
+                traceTd.className = 'trace-cell';
+                if (r.type === 'trace') traceTd.innerHTML = r.trace.join('<span class="arrow">&rarr;</span>');
+                else { traceTd.textContent = r.trace[0]; traceTd.style.color = 'var(--text-secondary)'; traceTd.style.fontStyle = 'italic'; }
+
+                const tdCount = document.createElement('td');
+                tdCount.textContent = r.count;
+                tr.appendChild(tdCount);
+
+                tr.appendChild(traceTd);
+                tbody.appendChild(tr);
+            });
+
+            // Headers
+            const ths = document.querySelectorAll('#tracesCard th');
+            if (ths.length >= 2) {
+                ths[0].onclick = () => sortTable('count');
+                ths[0].style.cursor = 'pointer'; ths[0].title = "Sort by Count";
+
+                ths[1].onclick = () => sortTable('trace');
+                ths[1].style.cursor = 'pointer'; ths[1].title = "Sort by Variant";
+            }
+        }
+
+        function sortTable(key) {
+            sortDir = -sortDir;
+            currentResults.sort((a, b) => {
+                if (key === 'count') return (a.count - b.count) * sortDir;
+                const sa = a.trace.join(' ');
+                const sb = b.trace.join(' ');
+                return sa.localeCompare(sb) * sortDir;
+            });
+            renderTable(currentResults);
+        }
+    </script>
+
+</body>
+
+</html>

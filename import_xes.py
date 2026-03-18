@@ -1,0 +1,282 @@
+import gzip
+import xml.etree.ElementTree as ET
+from datetime import datetime
+import sys
+import json
+import os
+import struct
+import hashlib
+
+# --- Configuration ---
+
+BASE_DIR = os.getcwd()
+# Ensure Player-Data exists
+if not os.path.exists("Player-Data"):
+    os.makedirs("Player-Data")
+
+OUTPUT_A = os.path.join(BASE_DIR, "Player-Data/Input-P0-0")
+OUTPUT_B = os.path.join(BASE_DIR, "Player-Data/Input-P1-0")
+OUTPUT_A_BIN = os.path.join(BASE_DIR, "Player-Data/Input-Binary-P0-0")
+OUTPUT_B_BIN = os.path.join(BASE_DIR, "Player-Data/Input-Binary-P1-0")
+
+# Padding values for empty slots
+PAD_TIME = 2**60
+PAD_ACT = 0
+PAD_ID = 2**60 # Use Max 64-bit value for ID padding to stay sorted at end
+
+def parse_xes(filepath, use_handovers=False):
+    """Parses .xes.gz and returns list of cases: {'id': str, 'events': [(time, act), ...]}"""
+    print(f"Reading {filepath}... (Use Handovers: {use_handovers})")
+    
+    # Handle both .gz and plain .xes
+    opener = gzip.open if filepath.endswith(".gz") else open
+    
+    try:
+        with opener(filepath, 'rb') as f:
+            tree = ET.parse(f)
+            root = tree.getroot()
+    except FileNotFoundError:
+        print(f"Error: File not found: {filepath}")
+        return []
+    except Exception as e:
+        print(f"Error parsing XML: {e}")
+        return []
+
+    cases = []
+    
+    # Try to find traces with namespace first, then without
+    traces = root.findall('.//{http://www.xes-standard.org/}trace')
+    if not traces:
+        traces = root.findall('.//trace')
+    
+    print(f"Found {len(traces)} traces in {filepath}")
+    
+    for trace in traces:
+        # Extract Case ID
+        case_id = "Unknown"
+        
+        # Try with namespace first
+        for attr in trace.findall('{http://www.xes-standard.org/}string'):
+            if attr.get('key') == 'concept:name':
+                case_id = attr.get('value')
+                break
+        
+        # Fallback without namespace
+        if case_id == "Unknown":
+            for attr in trace.findall('string'):
+                if attr.get('key') == 'concept:name':
+                    case_id = attr.get('value')
+                    break
+        
+        events = []
+        
+        # Try to find events with namespace first, then without
+        event_list = trace.findall('{http://www.xes-standard.org/}event')
+        if not event_list:
+            event_list = trace.findall('event')
+            
+        full_events = []
+            
+        for event in event_list:
+            timestamp = 0
+            activity = "Unknown"
+            
+            # Extract Timestamp - try with namespace first
+            date_attrs = event.findall('{http://www.xes-standard.org/}date')
+            if not date_attrs:
+                date_attrs = event.findall('date')
+                
+            for date in date_attrs:
+                if date.get('key') == 'time:timestamp':
+                    # Parse ISO 8601 (e.g., 2012-03-01T00:00:00.000+01:00)
+                    ts_str = date.get('value')
+                    try:
+                        # Simplified parser (strips timezone for integer conversion)
+                        dt = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                        timestamp = int(dt.timestamp())
+                    except ValueError:
+                        pass # Handle format errors if needed
+            
+            # Extract Activity Name - try with namespace first
+            string_attrs = event.findall('{http://www.xes-standard.org/}string')
+            if not string_attrs:
+                string_attrs = event.findall('string')
+                
+            for string in string_attrs:
+                if string.get('key') == 'concept:name':
+                    activity = string.get('value')
+            
+            # Keep track of the full sequence for fingerprinting
+            full_events.append((timestamp, activity))
+            
+            # Ensure handover logic
+            if use_handovers:
+                # Find boolean handover flag if present (default to false if missing)
+                is_handover = False
+                bool_attrs = event.findall('{http://www.xes-standard.org/}boolean')
+                if not bool_attrs:
+                    bool_attrs = event.findall('boolean')
+                    
+                for b_attr in bool_attrs:
+                    if b_attr.get('key') == 'handover' and b_attr.get('value') == 'true':
+                        is_handover = True
+                        break
+                        
+                if not is_handover:
+                    # Skip this event completely because it is not a handover point
+                    continue
+
+            events.append((timestamp, activity))
+            
+        if use_handovers and full_events:
+            # Generate a Secure Hash Fingerprint of the original local sequence
+            # This ensures that traces with identical handovers but different internal logic do not collide
+            hash_input = "".join([act for t, act in full_events]).encode('utf-8')
+            fingerprint_hash = hashlib.md5(hash_input).hexdigest()[:8]
+            fingerprint_act = f"Fingerprint_{fingerprint_hash}"
+            
+            # Assign a timestamp + 1s to ensure it sorts strictly to the end of the local case
+            max_time = max(t for t, act in full_events)
+            events.append((max_time + 1, fingerprint_act))
+        
+        # Sort events by timestamp to ensure local sorted invariant
+        events.sort(key=lambda x: x[0])
+
+        if events:  # Only add traces that have events
+            cases.append({'id': case_id, 'events': events})
+        
+    return cases
+
+def encode_and_save(cases_a, cases_b):
+    """Aligns dictionaries and writes MPC input files"""
+    
+    # 1. Build Global Dictionaries (Shared Context)
+    # In a real Federated setup, this requires a secure set intersection protocol.
+    # For this demo, we compute it in the clear.
+    
+    # --- BITONIC MERGE PREPARATION ---
+    # Party 0 sorted ASCENDING
+    cases_a.sort(key=lambda c: c['id'])
+    # Party 1 sorted DESCENDING
+    cases_b.sort(key=lambda c: c['id'], reverse=True)
+    print("Sorted inputs for Bitonic Merge: P0 (Asc), P1 (Desc)")
+    # ---------------------------------
+
+    all_case_ids = set(c['id'] for c in cases_a + cases_b)
+    all_activities = set(e[1] for c in cases_a + cases_b for e in c['events'])
+    
+    # Create Mappings
+    case_id_map = {cid: i+1 for i, cid in enumerate(sorted(all_case_ids))}
+    act_map = {act: i+1 for i, act in enumerate(sorted(all_activities))}
+
+    # --- NEW: Save Mapping to JSON ---
+    # Invert map: ID -> Name
+    id_to_act = {v: k for k, v in act_map.items()}
+    with open("Player-Data/activity_map.json", "w") as f:
+        json.dump(id_to_act, f)
+    print("Saved Activity Mapping to 'Player-Data/activity_map.json'")
+    # ---------------------------------
+
+    print(f"Mapped {len(all_case_ids)} Cases, {len(all_activities)} Activities.")
+    # ... rest of function ...
+
+    # --- INSERT THIS BLOCK ---
+    print("\n--- ACTIVITY DECODER RING ---")
+    # Sort by ID so we can look them up easily
+    sorted_acts = sorted(act_map.items(), key=lambda item: item[1])
+    for name, id in sorted_acts:
+        print(f"ID {id}: '{name}'")
+    print("-----------------------------\n")
+    # -------------------------
+    
+    print(f"Found {len(all_case_ids)} unique Cases and {len(all_activities)} unique Activities.")
+
+    # 2. Determine Dimensions
+    max_len_a = max(len(c['events']) for c in cases_a) if cases_a else 0
+    max_len_b = max(len(c['events']) for c in cases_b) if cases_b else 0
+    max_len = max(max_len_a, max_len_b)
+    
+    n_a = len(cases_a)
+    n_b = len(cases_b)
+    n_max = max(n_a, n_b) # We pad the number of rows to match
+    
+    print(f"Configuration for MPC: N_PER_PARTY={n_max}, PARTIAL_LEN={max_len}")
+    
+    # 3. Write Inputs
+    def write_party_file(filename, filename_bin, cases, target_n, target_len, pad_at_start=False):
+        """Write both text and binary input files for MP-SPDZ"""
+        # Write text file (space-separated values, one row per line)
+        with open(filename, 'w') as f:
+            # Prepare all rows first
+            all_rows = []
+            
+            # Real Data Rows
+            for c in cases:
+                row = []
+                # Case ID
+                row.append(case_id_map.get(c['id'], 0))
+                # Events
+                for j in range(target_len):
+                    if j < len(c['events']):
+                        t, act = c['events'][j]
+                        row.append(t)
+                        row.append(act_map.get(act, 0))
+                    else:
+                        row.append(PAD_TIME)
+                        row.append(PAD_ACT)
+                all_rows.append(row)
+            
+            # Padding Rows
+            pad_needed = target_n - len(cases)
+            padding_row = [PAD_ID] + [PAD_TIME, PAD_ACT] * target_len
+            
+            final_rows = []
+            if pad_at_start:
+                final_rows = [padding_row] * pad_needed + all_rows
+            else:
+                final_rows = all_rows + [padding_row] * pad_needed
+
+            # Write to file
+            for row in final_rows:
+                 f.write(" ".join(map(str, row)) + "\n")
+        
+        # Write binary file (little-endian 64-bit integers)
+        with open(filename_bin, 'wb') as f:
+            for row in final_rows:
+                for value in row:
+                    f.write(struct.pack('<q', value))
+            
+    write_party_file(OUTPUT_A, OUTPUT_A_BIN, cases_a, n_max, max_len, pad_at_start=False)
+    write_party_file(OUTPUT_B, OUTPUT_B_BIN, cases_b, n_max, max_len, pad_at_start=True)
+    
+    print("Input files (text and binary) generated successfully.")
+    return n_max, max_len
+
+if __name__ == "__main__":
+    # You can also pass file paths as arguments
+    if len(sys.argv) >= 3:
+        FILE_A = sys.argv[1]
+        FILE_B = sys.argv[2]
+    else:
+        print("Error: Please provide two XES file paths as arguments")
+        print("Usage: python3 import_xes.py <file_a.xes[.gz]> <file_b.xes[.gz]>")
+        sys.exit(1)
+
+    log_a = parse_xes(FILE_A)
+    log_b = parse_xes(FILE_B)
+    
+    if not log_a or not log_b:
+        print("Failed to load logs.")
+        sys.exit(1)
+        
+    # Limit to first 20 cases for testing
+    #MAX_CASES = 50
+    #log_a = log_a[:MAX_CASES]
+    #log_b = log_b[:MAX_CASES]
+
+    n, length = encode_and_save(log_a, log_b)
+    
+    print("\n!!! UPDATE YOUR .mpc FILE WITH THESE VALUES !!!")
+    print(f"N_PER_PARTY = {n}")
+    print(f"PARTIAL_LEN = {length}")
+    print(f"FULL_LEN = {length * 2}")

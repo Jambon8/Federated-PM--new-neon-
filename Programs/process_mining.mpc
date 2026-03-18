@@ -1,0 +1,509 @@
+from Compiler.types import Array, Matrix, MemValue, regint, sint
+from Compiler.library import print_ln, for_range, if_, start_timer, stop_timer, for_range_opt_multithread
+from Compiler.GC.types import sbitint, sbit
+
+# --- CONFIGURATION ---
+# Default values
+N_PER_PARTY = 8
+PARTIAL_LEN = 3
+N_THREADS = 16
+THRESHOLD = 1
+ENABLE_K_ANON = 0
+
+# 1. Try to load from program.args (Standard MP-SPDZ)
+try:
+    if len(program.args) > 1: N_PER_PARTY = int(program.args[1])
+    if len(program.args) > 2: PARTIAL_LEN = int(program.args[2])
+    if len(program.args) > 3: N_THREADS = int(program.args[3])
+    if len(program.args) > 4: THRESHOLD = int(program.args[4])
+    if len(program.args) > 5: ENABLE_K_ANON = int(program.args[5])
+except:
+    pass
+
+# 2. Try to load from Neon Substitution
+# Neon will replace the string literals 'NEON_ARG_...' with their values (e.g. '635').
+# If not replaced, int('NEON_ARG...') raises ValueError, and we stick to previous values.
+try:
+    N_PER_PARTY = int('NEON_ARG_N_PER_PARTY')
+except ValueError:
+    pass
+
+try:
+    PARTIAL_LEN = int('NEON_ARG_PARTIAL_LEN')
+except ValueError:
+    pass
+
+try:
+    N_THREADS = int('NEON_ARG_N_THREADS')
+except ValueError:
+    pass
+
+try:
+    THRESHOLD = int('NEON_ARG_THRESHOLD')
+except ValueError:
+    pass
+
+try:
+    ENABLE_K_ANON = int('NEON_ARG_ENABLE_K_ANON')
+except ValueError:
+    pass
+
+print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON)
+
+TOTAL_N = N_PER_PARTY * 2
+FULL_LEN = PARTIAL_LEN * 2         
+COLS_PER_EVENT = 2
+ROW_WIDTH = 2 + (PARTIAL_LEN * COLS_PER_EVENT)
+
+# FORCE BINARY TYPE
+sint64 = sbitint.get_type(64)
+
+def main():
+    print_ln("Config: N=%s, Partial_Len=%s, Threshold=%s, K-Anon=%s", N_PER_PARTY, PARTIAL_LEN, THRESHOLD, ENABLE_K_ANON)
+    
+    data = sint64.Matrix(TOTAL_N, ROW_WIDTH)
+
+    # --- Step 1: Reading Inputs ---
+    # --------------------
+    # STEP 1: READ INPUTS
+    # --------------------
+    print_ln("Reading inputs...")
+    #neon_timer: Reading Inputs NEON_TIMER_INPUTS
+    start_timer(NEON_TIMER_INPUTS)
+    
+    for i in range(N_PER_PARTY):
+        data[i][0] = sint64.get_input_from(0)
+        data[i][1] = sint64(0)
+        for j in range(PARTIAL_LEN):
+            data[i][2 + j*2] = sint64.get_input_from(0)
+            data[i][2 + j*2 + 1] = sint64.get_input_from(0)
+
+    for i in range(N_PER_PARTY):
+        row = N_PER_PARTY + i
+        data[row][0] = sint64.get_input_from(1)
+        data[row][1] = sint64(1) 
+        for j in range(PARTIAL_LEN):
+            data[row][2 + j*2] = sint64.get_input_from(1)
+            data[row][2 + j*2 + 1] = sint64.get_input_from(1)
+            
+    stop_timer(NEON_TIMER_INPUTS)
+
+    # --- Step 2: PSI ---
+    print_ln("PSI (Bitonic Merge)")
+    #neon_timer: PSI Bitonic Merge NEON_TIMER_PSI
+    start_timer(NEON_TIMER_PSI)
+    
+    # --- Bitonic Merge Optimization ---
+    # We assume inputs are pre-sorted: P0 Ascending, P1 Descending.
+    # This forms a Bitonic Sequence (Ascending -> Descending).
+    # We pad to the next Power of 2 with MAX Values to perform oblivious Bitonic Merge.
+    
+    # 1. Calculate Power of 2 Size
+    NEXT_POW2 = 1
+    while NEXT_POW2 < TOTAL_N:
+        NEXT_POW2 *= 2
+    
+    # Optimization: If TOTAL_N is already Pow2, we might not need padding, 
+    # but the logic is uniform with padding.
+    
+    # 2. Create Padded Matrix
+    # We use a large MAX value for padding so these elements end up at the bottom after sort.
+    # 2^60 is safe for standard timestamps/IDs (sint64 range).
+    # PAD_VAL = sint64(2**60)  <-- FIXED: Don't create register here
+    
+    padded_data = sint64.Matrix(NEXT_POW2, ROW_WIDTH)
+
+    # 3. Fill Padded Matrix
+    # We split into 3 loops to avoid complex branching inside threads.
+    
+    # A) Copy Party 0 (Ascending) -> Indices 0 to N_PER_PARTY-1
+    @for_range_opt_multithread(N_THREADS, N_PER_PARTY)
+    def _(i):
+        for c in range(ROW_WIDTH):
+            padded_data[i][c] = data[i][c]
+
+    # B) Fill Padding (Middle) -> Indices N_PER_PARTY to NEXT_POW2 - N_PER_PARTY - 1
+    pad_start = N_PER_PARTY
+    pad_end = NEXT_POW2 - N_PER_PARTY
+    if pad_end > pad_start:
+        @for_range_opt_multithread(N_THREADS, pad_end - pad_start)
+        def _(k):
+            idx = pad_start + k
+            # Key = MAX, others = 0
+            # FIXED: Instantiate constant inside thread
+            padded_data[idx][0] = sint64(2**60)
+            for c in range(1, ROW_WIDTH):
+                padded_data[idx][c] = sint64(0)
+
+    # C) Copy Party 1 (Descending) -> Indices NEXT_POW2 - N_PER_PARTY to NEXT_POW2 - 1
+    # We map data[N_PER_PARTY...2N-1] to the end of padded_data
+    @for_range_opt_multithread(N_THREADS, N_PER_PARTY)
+    def _(k):
+        target_idx = pad_end + k
+        src_idx = N_PER_PARTY + k
+        for c in range(ROW_WIDTH):
+            padded_data[target_idx][c] = data[src_idx][c]
+
+    # 4. Bitonic Merge Network
+    # Since the sequence is now Bitonic (Asc -> Pad(Max) -> Desc), 
+    # we only need the "Merge" phase of Bitonic Sort.
+    
+    step = NEXT_POW2 // 2
+    
+    # We use a standard Python loop for the steps (log N iterations),
+    # but we parallelize the comparisons within each step (N/2 ops).
+    while step > 0:
+        n_ops = NEXT_POW2 // 2
+        
+        # Pass 'step' as a constant to the thread
+        step_val = step
+
+        @for_range_opt_multithread(N_THREADS, n_ops)
+        def _(i):
+            # Dynamic Index Calculation
+            # k = index within the 'step' block
+            # j = start of the '2*step' block
+            k = i % step_val
+            j = (i // step_val) * (2 * step_val)
+            
+            idx1 = j + k
+            idx2 = idx1 + step_val
+            
+            # --- Load Key (Index 0) ---
+            key_a = padded_data[idx1][0]
+            key_b = padded_data[idx2][0]
+            
+            # --- Compare ---
+            swap = (key_a > key_b)
+            
+            # --- Swap All Columns ---
+            for c in range(ROW_WIDTH):
+                val_a = padded_data[idx1][c]
+                val_b = padded_data[idx2][c]
+                
+                # Oblivious Swap (MUX)
+                # If swap=1: new_a = val_b, new_b = val_a
+                # If swap=0: new_a = val_a, new_b = val_b
+                
+                # Using if_else for clarity and safety with MP-SPDZ types
+                new_a = swap.if_else(val_b, val_a)
+                new_b = swap.if_else(val_a, val_b)
+                
+                padded_data[idx1][c] = new_a
+                padded_data[idx2][c] = new_b
+                
+        step //= 2
+
+    # 5. Copy Result Back (Truncate Padding)
+    # The first TOTAL_N elements are the sorted result.
+    @for_range_opt_multithread(N_THREADS, TOTAL_N)
+    def _(i):
+        for c in range(ROW_WIDTH):
+            data[i][c] = padded_data[i][c]
+
+    stop_timer(NEON_TIMER_PSI)
+
+    # --- Step 3: Reconstruction ---
+    print_ln("Reconstruction")
+    #neon_timer: Reconstruction NEON_TIMER_RECON
+    start_timer(NEON_TIMER_RECON)
+    merged_data = sint64.Matrix(TOTAL_N, 2 + FULL_LEN)
+    merged_data.assign_all(0)
+
+    MAX_TIME = 2**60 
+    
+    NEXT_POW2 = 1
+    while NEXT_POW2 < FULL_LEN:
+        NEXT_POW2 *= 2
+    
+    @for_range_opt_multithread(N_THREADS, TOTAL_N - 1)
+    def _(i):
+        # We need to verify that we are not matching on Padding (MAX_TIME)
+        # Note: MPC Padding is 2**60. Input generic padding is now also 2**60.
+        PAD_VAL = sint64(2**60) 
+        
+        ids_match = (data[i][0] == data[i+1][0])
+        diff_parties = (data[i][1] != data[i+1][1])
+        is_valid_id = (data[i][0] != PAD_VAL)
+        
+        is_match = ids_match & diff_parties & is_valid_id
+        
+        merged_data[i][1] = is_match ^ 1
+        
+        sort_keys = [sint64(MAX_TIME) for _ in range(NEXT_POW2)]
+        sort_vals = [sint64(0) for _ in range(NEXT_POW2)]
+        
+        for k in range(PARTIAL_LEN):
+            sort_keys[k] = data[i][2 + k*2]
+            sort_vals[k] = data[i][2 + k*2 + 1]
+            
+        for k in range(PARTIAL_LEN):
+            idx = NEXT_POW2 - 1 - k
+            sort_keys[idx] = data[i+1][2 + k*2]
+            sort_vals[idx] = data[i+1][2 + k*2 + 1]
+
+        # Track padding state (True = Known MAX_TIME)
+        is_padding = [False] * NEXT_POW2
+        
+        # Initialize Padding State based on layout
+        # 0..PARTIAL_LEN-1 -> Data (False)
+        # PARTIAL_LEN..NEXT_POW2-PARTIAL_LEN-1 -> Padding (True)
+        # NEXT_POW2-PARTIAL_LEN..NEXT_POW2-1 -> Data (False)
+        for k in range(PARTIAL_LEN, NEXT_POW2 - PARTIAL_LEN):
+             is_padding[k] = True
+
+        step = NEXT_POW2 // 2
+        while step > 0:
+            # Generate pairs for this step
+            pairs = []
+            for j in range(0, NEXT_POW2, step * 2):
+                for k in range(step):
+                    pairs.append((j + k, j + k + step))
+
+            # Pruned Batch Processing
+            # We must process the lists manually to distinguish "Compare" vs "Static" vs "NoOp"
+            
+            # Temporary lists for "Data vs Data" batching (for vectorization efficiency)
+            batch_pairs = []
+            batch_keys_a = []
+            batch_keys_b = []
+            batch_vals_a = []
+            batch_vals_b = []
+
+            for idx1, idx2 in pairs:
+                p1 = is_padding[idx1]
+                p2 = is_padding[idx2]
+                
+                if p1 and p2:
+                    # Pad vs Pad -> Both MAX. No Swap needed. State Unchanged.
+                    pass
+                    
+                elif not p1 and p2:
+                    # Data vs Pad (MAX).
+                    # Data < MAX is always True (Assuming Data != MAX).
+                    # Swap = 0 (A > B is False).
+                    # new_A = Min(A, B) = A (Data)
+                    # new_B = Max(A, B) = B (Pad)
+                    # Result: No Op (Data stays at idx1, Pad stays at idx2).
+                    pass
+                    
+                elif p1 and not p2:
+                    # Pad (MAX) vs Data.
+                    # MAX > Data is always True.
+                    # Swap = 1.
+                    # new_A = Min(A, B) = B (Data)
+                    # new_B = Max(A, B) = A (Pad)
+                    
+                    # Move Data from idx2 to idx1
+                    sort_keys[idx1] = sort_keys[idx2]
+                    sort_vals[idx1] = sort_vals[idx2]
+                    
+                    # Restore Pad at idx2 (It effectively moved there)
+                    sort_keys[idx2] = sint64(MAX_TIME)
+                    sort_vals[idx2] = sint64(0)
+                    
+                    # Update State
+                    is_padding[idx1] = False
+                    is_padding[idx2] = True
+                    
+                else: 
+                    # Data vs Data -> Must Compare Obliviously
+                    batch_pairs.append((idx1, idx2))
+                    batch_keys_a.append(sort_keys[idx1])
+                    batch_keys_b.append(sort_keys[idx2])
+                    batch_vals_a.append(sort_vals[idx1])
+                    batch_vals_b.append(sort_vals[idx2])
+
+            # Process the accumulated "Data vs Data" batch
+            if batch_pairs:
+                # Batch Compare
+                swaps = [(a > b) for a, b in zip(batch_keys_a, batch_keys_b)]
+                
+                # Batch Mux
+                new_keys_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_keys_a, batch_keys_b)]
+                new_keys_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_keys_a, batch_keys_b)]
+                
+                new_vals_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_vals_a, batch_vals_b)]
+                new_vals_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_vals_a, batch_vals_b)]
+                
+                # Batch Write
+                for (idx1, idx2), ka, kb, va, vb in zip(batch_pairs, new_keys_a, new_keys_b, new_vals_a, new_vals_b):
+                    sort_keys[idx1] = ka
+                    sort_keys[idx2] = kb
+                    sort_vals[idx1] = va
+                    sort_vals[idx2] = vb
+            
+            step //= 2
+
+        for k in range(FULL_LEN):
+            t = sort_keys[k]
+            a = sort_vals[k]
+            
+            is_padding = (t == MAX_TIME)
+            final_a = is_padding.if_else(sint64(0), a)
+            merged_data[i][2 + k] = is_match.if_else(final_a, sint64(0))
+    stop_timer(NEON_TIMER_RECON)
+
+    # --- Step 4: Robust Binary Hashing ---
+    print_ln("--- [TIMESTAMP] Starting Step 4: Binary Hashing (In-Place) ---")
+    #neon_timer: Hashing NEON_TIMER_HASH
+    start_timer(NEON_TIMER_HASH)
+    
+    # Write hashes directly into merged_data[i][0]
+    @for_range_opt_multithread(N_THREADS, TOTAL_N)
+    def _(i):
+        h = sint64(0)
+        
+        # Note: Match bit and traces now start at index 1
+        for k in range(1 + FULL_LEN):
+            val = merged_data[i][1 + k]
+            h = h ^ val
+            h = h ^ (h << 10)
+            h = h ^ (h >> 6)
+            
+        h = h ^ (h << 3)
+        h = h ^ (h >> 11)
+        h = h ^ (h << 15)
+        
+        merged_data[i][0] = h
+    stop_timer(NEON_TIMER_HASH)
+
+    # --- Step 5: Secure Grouping (Narrow-Key Sort Optimization) ---
+    print_ln("--- [TIMESTAMP] Starting Step 5: Grouping (Narrow-Key Sort) ---")
+    #neon_timer: Grouping NEON_TIMER_GROUP
+    start_timer(NEON_TIMER_GROUP)
+    
+    # OPTIMIZATION: Sort a narrow [hash, orig_index, valid_bit] matrix (3 cols)
+    # instead of full merged_data (2 + FULL_LEN cols).
+    # Every compare-and-swap now moves 3 values instead of 2+FULL_LEN.
+    # We include valid_bit so the output pass can determine keep without
+    # needing a secret-indexed lookup into merged_data.
+    start_timer(100)
+    narrow_keys = sint64.Matrix(TOTAL_N, 3)  # [hash, orig_index, valid_bit]
+    
+    @for_range_opt_multithread(N_THREADS, TOTAL_N)
+    def _(i):
+        narrow_keys[i][0] = merged_data[i][0]  # hash
+        narrow_keys[i][1] = sint64(i)           # original index
+        narrow_keys[i][2] = merged_data[i][1]   # valid_bit (match flag)
+    stop_timer(100)
+    
+    start_timer(101)
+    narrow_keys.sort(key_indices=[0], n_threads=N_THREADS)
+    stop_timer(101)
+    
+    start_timer(102)
+    c_counts = Array(TOTAL_N, sint64) 
+    c_counts.assign_all(0)
+    is_last = Array(TOTAL_N, sint64)
+    is_last.assign_all(0)
+    current_group_count = MemValue(sint64(1))
+    
+    # Serial counting pass — reads hashes from the narrow sorted array
+    @for_range_opt(TOTAL_N - 1)
+    def _(i):
+        h_curr = narrow_keys[i][0]
+        h_next = narrow_keys[i+1][0]
+        
+        is_equal = (h_curr == h_next)
+        
+        cnt = current_group_count.read()
+        new_cnt = is_equal.if_else(cnt + 1, sint64(1))
+        current_group_count.write(new_cnt)
+        
+        is_last_bit = is_equal ^ 1
+        is_last[i] = is_last_bit
+        c_counts[i] = is_equal.if_else(sint64(0), cnt)
+
+    is_last[TOTAL_N - 1] = sint64(1)
+    c_counts[TOTAL_N - 1] = current_group_count.read()
+    stop_timer(102)
+    stop_timer(NEON_TIMER_GROUP)
+
+    # --- Output (Narrow-Key + Public Index Reveal) ---
+    print_ln("--- [TIMESTAMP] Starting Step 6: Output (Batch Reveal) ---")
+    #neon_timer: Output Reveal NEON_TIMER_OUTPUT
+    start_timer(NEON_TIMER_OUTPUT)
+    threshold_sb = sint64(THRESHOLD)
+    print_ln("--- Results (Threshold >= %s) ---", threshold_sb.reveal())
+    
+    # Must use MemValue to pass to threads
+    threshold_mem = MemValue(threshold_sb)
+    
+    should_reveal_arr = Array(TOTAL_N, sint64)
+    revealed_counts = Array(TOTAL_N, sint64)
+    masked_orig_idx = Array(TOTAL_N, sint64)
+    others_counts = Array(TOTAL_N, sint64)
+    others_counts.assign_all(0)
+    
+    # Pass 1: Compute keep mask, counts, and masked original indices
+    # Uses valid_bit from the narrow sorted matrix (no secret indexing needed)
+    @for_range_opt_multithread(N_THREADS, TOTAL_N)
+    def _(i):
+        threshold = threshold_mem.read()
+        
+        # Read valid_bit from narrow_keys (carried through the sort)
+        valid_bit = narrow_keys[i][2]
+        is_valid_trace = (valid_bit == 0)
+        
+        count_ok = (c_counts[i] >= threshold)
+        last_bit = (is_last[i] != 0)
+        
+        keep = is_valid_trace & last_bit & count_ok
+        should_reveal_arr[i] = keep
+        revealed_counts[i] = c_counts[i] * keep
+
+        if ENABLE_K_ANON:
+            is_other = is_valid_trace & last_bit & (1 - count_ok)
+            others_counts[i] = c_counts[i] * is_other
+        
+        # Mask orig index: kept rows get real index, others get 0
+        # This is safe — kept rows' traces are revealed anyway, so their
+        # position in merged_data is not additional leakage.
+        masked_orig_idx[i] = keep.if_else(narrow_keys[i][1], sint64(0))
+
+    # Batch reveal: keep mask, counts, and masked original indices
+    mask_list = should_reveal_arr.reveal()
+    counts_list = revealed_counts.reveal()
+    revealed_orig = masked_orig_idx.reveal()  # regint — safe for public indexing
+
+    # Pass 2: Build flat_traces using PUBLIC regint indices into merged_data
+    # Only kept rows read their actual trace; others read from index 0 (dummy)
+    flat_traces = Array(TOTAL_N * FULL_LEN, sint64)
+    flat_traces.assign_all(0)
+    
+    @for_range_opt_multithread(N_THREADS, TOTAL_N)
+    def _(i):
+        public_keep = mask_list[i]  # regint 0 or 1
+        public_orig = revealed_orig[i]  # regint — public index into merged_data
+        
+        @if_(public_keep)
+        def _():
+            for k in range(FULL_LEN):
+                flat_traces[i * FULL_LEN + k] = merged_data[public_orig][2 + k]
+
+    traces_list = flat_traces.reveal()
+
+    @for_range_opt(TOTAL_N)
+    def _(i):
+        do_print = mask_list[i]
+        
+        @if_(do_print)
+        def _():
+            print_ln("RAW_RESULT Count:%s Trace:", counts_list[i])
+            for k in range(FULL_LEN):
+                val = traces_list[i * FULL_LEN + k]
+                print_ln("%s", val)
+            print_ln("END_TRACE")
+            
+    if ENABLE_K_ANON:
+        total_others = MemValue(sint64(0))
+        @for_range_opt(TOTAL_N)
+        def _(i):
+            total_others.write(total_others.read() + others_counts[i])
+        
+        print_ln("Others count (below threshold): %s", total_others.read().reveal())
+    
+    stop_timer(NEON_TIMER_OUTPUT)
+
+main()

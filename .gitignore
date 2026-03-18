@@ -1,0 +1,23 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime — regenerated on every run
+Player-Data/
+logs/
+
+# MP-SPDZ installation — large binaries, reinstall via: python3 setup.py install-mpspdz
+temp/
+
+# MP-SPDZ compiled program cache — regenerated automatically on first run
+Programs/Source/
+Programs/Bytecode/
+Programs/Schedules/
+Programs/asm/
+
+# Built documentation
+docs/build/
+
+# NEON debug logging config (auto-generated)
+config/debug_logging.conf
