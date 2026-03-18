@@ -1,75 +1,134 @@
-# NEON and XENON
+# Privacy-Aware Federated Process Mining
 
-This repository contains the source code of **NEON** (NEtwork simulatiON and benchmarking wrapper) and **XENON** (eXecution time Estimator with Network consideratiON) presented in the paper:
-*Estimating the Runtime and Global Network Traffic of SMPC Protocols. (Andreas Klinger, Vincent Ehrmanntraut, and Ulrike Meyer. 2024. CODASPY 2024.)*
+Secure multi-party computation of process mining over event logs from two organisations, using the [NEON](README.md) framework on top of MP-SPDZ.
 
-NEON allows to easily execute and benchmark SMPC protocols written in [MP-SPDZ](https://github.com/data61/MP-SPDZ) in different network settings.
+Two parties each hold a private event log (XES or OCEL format). The protocol jointly computes the set of common process traces and their frequencies without either party learning the other's raw data.
 
-XENON allows to estimate the execution time and network traffic of SMPC protocols written in [MP-SPDZ](https://github.com/data61/MP-SPDZ) while considering different network settings.
+---
 
+## Requirements
 
-## NEON - NEtwork simulatiON and benchmarking wrapper
+- Python 3.10+
+- Python packages: `flask` (for the web UI only)
+- MP-SPDZ 0.4.2 — already installed at `temp/MP/mp-spdz-0.4.2/`
 
-NEON (NEtwork simulatiON and benchmarking wrapper) is a framework that acts as a wrapper for [MP-SPDZ](https://github.com/data61/MP-SPDZ).
-It allows to perform benchmarks of protocol executions. Main features are:
+---
 
-- Simulate different network settings
-- Set protocol, program, inputs, secrets, number of parties, batch size, ...
-- Get measurements like runtime, or MP-SPDZ global data (with extensive reports)
-- Named Timers for MP-SPDZ programs
-- Variable substitution for MP-SPDZ programs
+## Running from the command line
 
-You can find a **quick start guide** and other information about NEON in the [documentation](docs/build/html/index.html) (see below).
+**Always run from the `neon_new/neon/` directory.**
 
-**WARNING:** NEON changes some (default) MP-SPDZ settings, most notably we have enabled `bits-from-squares`, and we set a prime explicitly. Check the [documentation](docs/build/html/index.html) and also `ProgramFiles/neonconfig.py` for **important** details and default settings.
+```bash
+cd /home/jamil/Documents/neon_new/neon
 
-You can view the documentation locally in your browser by just opening the file `docs/build/html/index.html` in your browser. Alternatively, you can navigate to `docs/build/html/`, execute `python3 -m http.server`, and then open `localhost:8000/index.html` in your browser. You can generate/update the [documentation](docs/build/html/index.html) by executing `make html && make html` (yes twice) in the `docs` folder.
+python3 examples/run_process_mining.py \
+  --log-a /path/to/OrgA/log.xes.gz \
+  --log-b /path/to/OrgB/log.xes.gz
+```
 
+### All options
 
-**Compatibility:** NEON has been tested with Debian 12, and it is developed primarily for MP-SPDZ version 0.3.6 and the SMPC primitive ``Shamir``. NEON has options to use other MP-SPDZ versions and other SMPC primitives. However, compatibility with other MP-SPDZ versions as well as other SMPC primitives has only been partially tested and may be very limited, so consider them untested and experimental.
+| Flag | Default | Description |
+|---|---|---|
+| `--log-a` | *(BPI 2013 OrgA)* | Path to Organisation A's event log (`.xes`, `.xes.gz`, or `.json` for OCEL) |
+| `--log-b` | *(BPI 2013 OrgB)* | Path to Organisation B's event log |
+| `--threshold` | `1` | Minimum count for a trace to appear in the output |
+| `--threads` | `16` | Number of threads for the MPC computation |
+| `--k-anon` | `0` | Enable k-anonymity (`1` to enable) |
+| `--mode` | `local` | `local` (single machine) or `local-virtual` (simulated network) |
+| `--network` | — | Network preset: `unlimited`, `lan`, `wan-ent`, `wan-fast`, `wan-slow`, `5g-avg`, `5g-slow` |
+| `--delay` | — | Manual latency override, e.g. `20ms` (overrides `--network` if both set) |
+| `--compile-looping` | off | Pass `-l` to MP-SPDZ compiler — speeds up compilation of loop-heavy programs |
+| `--direct` | off | Pass `--direct` to MP-SPDZ runtime — direct party-to-party communication (faster on LAN) |
+| `--use-handovers` | off | Only include handover synchronisation events, not all events |
+| `--is-ocel` | off | Force OCEL parsing (auto-detected from `.json` extension) |
+| `--flatten-type` | `Container` | Object type to flatten an OCEL log on |
 
+### Examples
 
-## XENON - eXecution time Estimator with Network consideratiON
+```bash
+# XES logs, default settings
+python3 examples/run_process_mining.py \
+  --log-a /data/OrgA/log.xes.gz \
+  --log-b /data/OrgB/log.xes.gz
 
-XENON allows to estimate SMPC protocols written in [MP-SPDZ](https://github.com/data61/MP-SPDZ) while also considering network traffic.
+# With k-anonymity threshold of 5
+python3 examples/run_process_mining.py \
+  --log-a /data/OrgA/log.xes.gz \
+  --log-b /data/OrgB/log.xes.gz \
+  --threshold 5 --k-anon 1
 
-Given an SMPC protocol, number of parties, and a network setting (delay, outgoing and incoming bandwidth limitations), XENON estimates the total execution time in the specified network setting, as well as the overall global network traffic generated. XENON can produce detailed reports consisting of estimations of the individual instructions involved, and thus allows to determine possible bottlenecks. The protocol itself is not executed in order to obtain the estimations.
+# Simulated WAN network, faster compilation
+python3 examples/run_process_mining.py \
+  --log-a /data/OrgA/log.xes.gz \
+  --log-b /data/OrgB/log.xes.gz \
+  --mode local-virtual --network wan-fast \
+  --compile-looping --direct
 
-More details can be found in [XENON/README.md](XENON/README.md).
+# OCEL log
+python3 examples/run_process_mining.py \
+  --log-a /data/OrgA/ocel.json \
+  --log-b /data/OrgB/ocel.json \
+  --flatten-type Container
+```
 
+---
 
-## Requirements (NEON and XENON)
+## Running the web UI
 
-For just running and evaluating MP-SPDZ programs with NEON in different network settings install:
+```bash
+cd /home/jamil/Documents/neon_new/neon
+python3 app.py
+```
 
-* `Python 3.10 >=`
-  * Python modules: `matplotlib`, `requests`, `sympy` and `tqdm`
-* `zstd`
+Open `http://localhost:8000` in a browser. The UI lets you browse for log files, set all the same options as the CLI, and streams output live.
 
-If you want to test your network with NEON
-* `iperf3`
+---
 
-If you also want to estimate the runtime with XENON and perform the required benchmarks:
-* working `NEON`
-* `tshark`
-* `tcpdump`
-* Additional Python modules: `numpy`
+## Output
 
+The script prints:
 
-If you want to use the MP-SPDZ git (non-release) version which requires compilation of the source code, make sure to install the following first (not tested, might require additional packages)
-  * build tools from your distribution in order to compile MP-SPDZ
-  * `cmake`, `git`
+- **Activity decoder ring** — mapping of integer IDs to activity names
+- **Per-trace results** — count and sequence of activities for each common trace above the threshold
+- **Benchmarks** — total runtime, per-step timings, data sent
 
+To decode raw MP-SPDZ output manually:
 
+```bash
+python3 decode_output.py <output_file>
+# or pipe:
+some_command | python3 decode_output.py
+```
 
+---
 
+## Input log formats
 
+### XES / XES.GZ
 
-# Disclaimer
-Use at your own risk.
+Standard XES event log format. Both plain `.xes` and gzip-compressed `.xes.gz` are supported.
 
+### OCEL (JSON)
 
+OCEL 2.0 JSON format. Use `--flatten-type` to choose which object type defines the cases (default: `Container`).
 
-# Licenses
-NEON and XENON use and rely on the secure multi-party computation benchmarking framework MP-SPDZ listed in the following:
-- MP-SPDZ: copyright (c) 2023, Commonwealth Scientific and Industrial Research Organisation (CSIRO) ABN 41 687 119 230. See https://github.com/data61/MP-SPDZ/blob/v0.3.6/License.txt for details.
+---
+
+## File structure
+
+```
+neon_new/neon/
+├── examples/run_process_mining.py   # Main entry point
+├── Programs/process_mining.mpc      # MPC program (MP-SPDZ)
+├── import_xes.py                    # XES log parser + input encoder
+├── import_ocel.py                   # OCEL log parser + input encoder
+├── decode_output.py                 # CLI output decoder
+├── app.py                           # Flask web server
+├── api_helper.py                    # Output parsing for the web UI
+├── templates/index.html             # Web UI
+├── static/css/style.css             # Web UI styles
+├── ProgramFiles/                    # NEON library
+├── temp/MP/mp-spdz-0.4.2/          # MP-SPDZ installation
+└── Player-Data/                     # Runtime I/O (inputs, outputs, keys)
+```

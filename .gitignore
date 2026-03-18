@@ -21,3 +21,5 @@ docs/build/
 
 # NEON debug logging config (auto-generated)
 config/debug_logging.conf
+
+MIGRATION_NOTES.md
