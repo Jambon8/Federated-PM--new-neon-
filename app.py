@@ -66,6 +66,7 @@ def run_process_mining():
     use_handovers = data.get('use_handovers', False)
     is_ocel = data.get('is_ocel', False)
     flatten_type = data.get('flatten_type', 'Container')
+    direct = data.get('direct', True)
     
     if not log_a or not log_b:
         return jsonify({"error": "Both Log A and Log B are required."}), 400
@@ -89,6 +90,9 @@ def run_process_mining():
         if flatten_type:
             cmd.extend(["--flatten-type", flatten_type])
         
+    if not direct:
+        cmd.append("--no-direct")
+    
     if mode == "local-virtual" and network:
         cmd.extend(["--network", network])
     
@@ -120,4 +124,4 @@ def run_process_mining():
     return Response(stream_with_context(generate()), mimetype='text/plain')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=8000)
+    app.run(debug=False, port=8000)

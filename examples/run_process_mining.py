@@ -40,10 +40,9 @@ def main():
     parser.add_argument("--mode", type=str, choices=["local", "local-virtual"], default="local", help="Operation mode (default: local)")
     parser.add_argument("--delay", type=str, default=None, help="Manual Network delay (e.g. '20ms') - overrides preset if set")
     parser.add_argument("--network", type=str, default=None, choices=["unlimited", "lan", "wan-ent", "wan-fast", "wan-slow", "5g-avg", "5g-slow"], help="Network Preset Profile")
-    # Compiler flags
-    parser.add_argument("--compile-looping", action="store_true", help="Use -l flag: optimize loops for faster compilation")
-    # Runtime flags
-    parser.add_argument("--direct", action="store_true", help="Use --direct flag at runtime: direct communication between parties")
+    # Runtime flags (default: enabled)
+    parser.add_argument("--no-direct", dest="direct", action="store_false", help="Disable --direct flag at runtime: no direct communication between parties")
+    parser.set_defaults(direct=True)
     # Features
     parser.add_argument("--use-handovers", action="store_true", help="Filter out internal events and only compute on handover synchronization points")
     parser.add_argument("--is-ocel", action="store_true", help="Force OCEL processing (Approach 1)")
@@ -152,7 +151,6 @@ def main():
     # --- 4. Execute ---
     print("--- Executing SMPC ---")
     report = neon.smpc(
-        compile_looping=args.compile_looping,
         direct=args.direct
     )
     
