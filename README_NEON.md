@@ -65,6 +65,48 @@ If you want to use the MP-SPDZ git (non-release) version which requires compilat
 
 
 
+---
+
+# Changes Made to the NEON Library
+
+The following patches were applied to the NEON library (`ProgramFiles/`) to support the process mining application.
+
+## `ProgramFiles/protocol.py` — Restored `Semi` domain to `Domain.BINARY`
+
+The new library changed `Semi`'s domain from `Domain.BINARY` to `Domain.PRIME`. This was reverted:
+
+```python
+Semi = Protocol(executable="semi-party.x",
+                domain=Domain.BINARY,   # was incorrectly Domain.PRIME
+                ...)
+```
+
+**Why:** The `process_mining.mpc` program uses `sbitint.Matrix.sort()`, which internally calls `loopy_odd_even_merge_sort`. This path is only taken when the program is compiled under binary domain (`-B 64` flag). Under prime domain, the compiler routes to `radix_sort`, which raises an `AssertionError` for `sbitint` inputs. Additionally, the domain name is included in the program hash, so changing it invalidates all previously compiled binaries.
+
+## `ProgramFiles/neonhandler.py` — Restored `compile_looping` and `direct` arguments
+
+The new library removed `compile_looping` and `direct` from `smpc()`. They were re-added:
+
+- `smpc()` signature: added `compile_looping=False` and `direct=False`.
+- Inside `smpc()`: stores `direct` as `self.__direct`, passes `compile_looping` to `__compile()`.
+- `__compile()` signature: added `compile_looping=False`, passes it to `compile_program_if_necessary()`.
+- `func_start_client_computations` inside `__execute_smpc()`: passes `self.__direct` to `client.start_computation()`.
+
+## `ProgramFiles/programhandler.py` — Restored `compile_looping` pass-through
+
+- `compile_program_if_necessary()`: added `compile_looping=False`, passes it to `compile_program_locally()`.
+- `compile_program_locally()`: added `compile_looping=False`; inserts `-l` flag into the compiler args before `program_hash` when `compile_looping=True`.
+
+**Why:** The `-l` flag enables loop optimisation in the MP-SPDZ compiler, which significantly speeds up compilation of loop-heavy programs like `process_mining.mpc`.
+
+## `ProgramFiles/MPSPDZClient.py` — Restored `direct` flag support
+
+- `start_computation()`: added `direct=False`; inserts `--direct` into the MP-SPDZ runtime argument string before `--output-file` when `direct=True`.
+
+**Why:** `--direct` enables direct party-to-party communication instead of routing through a coordinator, reducing latency in LAN environments.
+
+---
+
 # Disclaimer
 Use at your own risk.
 

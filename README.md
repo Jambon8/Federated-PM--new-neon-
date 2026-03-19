@@ -16,10 +16,10 @@ Two parties each hold a private event log (XES or OCEL format). The protocol joi
 
 ## Running from the command line
 
-**Always run from the `neon_new/neon/` directory.**
+**Always run from the `neon_new/` directory.**
 
 ```bash
-cd /home/jamil/Documents/neon_new/neon
+cd /home/jamil/Documents/neon_new
 
 python3 examples/run_process_mining.py \
   --log-a /path/to/OrgA/log.xes.gz \
@@ -77,7 +77,7 @@ python3 examples/run_process_mining.py \
 ## Running the web UI
 
 ```bash
-cd /home/jamil/Documents/neon_new/neon
+cd /home/jamil/Documents/neon_new
 python3 app.py
 ```
 
@@ -118,7 +118,7 @@ OCEL 2.0 JSON format. Use `--flatten-type` to choose which object type defines t
 ## File structure
 
 ```
-neon_new/neon/
+neon_new/
 ├── examples/run_process_mining.py   # Main entry point
 ├── Programs/process_mining.mpc      # MPC program (MP-SPDZ)
 ├── import_xes.py                    # XES log parser + input encoder
