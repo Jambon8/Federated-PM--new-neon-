@@ -378,7 +378,8 @@ def main():
     # Every compare-and-swap now moves 3 values instead of 2+FULL_LEN.
     # We include valid_bit so the output pass can determine keep without
     # needing a secret-indexed lookup into merged_data.
-    start_timer(100)
+    #neon_timer: Grouping Setup NEON_TIMER_GROUP_SETUP
+    start_timer(NEON_TIMER_GROUP_SETUP)
     narrow_keys = sint64.Matrix(TOTAL_N, 3)  # [hash, orig_index, valid_bit]
     
     @for_range_opt_multithread(N_THREADS, TOTAL_N)
@@ -386,13 +387,15 @@ def main():
         narrow_keys[i][0] = merged_data[i][0]  # hash
         narrow_keys[i][1] = sint64(i)           # original index
         narrow_keys[i][2] = merged_data[i][1]   # valid_bit (match flag)
-    stop_timer(100)
+    stop_timer(NEON_TIMER_GROUP_SETUP)
     
-    start_timer(101)
+    #neon_timer: Grouping Sort NEON_TIMER_GROUP_SORT
+    start_timer(NEON_TIMER_GROUP_SORT)
     narrow_keys.sort(key_indices=[0], n_threads=N_THREADS)
-    stop_timer(101)
+    stop_timer(NEON_TIMER_GROUP_SORT)
     
-    start_timer(102)
+    #neon_timer: Grouping Count NEON_TIMER_GROUP_COUNT
+    start_timer(NEON_TIMER_GROUP_COUNT)
     c_counts = Array(TOTAL_N, sint64) 
     c_counts.assign_all(0)
     is_last = Array(TOTAL_N, sint64)
@@ -417,7 +420,7 @@ def main():
 
     is_last[TOTAL_N - 1] = sint64(1)
     c_counts[TOTAL_N - 1] = current_group_count.read()
-    stop_timer(102)
+    stop_timer(NEON_TIMER_GROUP_COUNT)
     stop_timer(NEON_TIMER_GROUP)
 
     # --- Output (Narrow-Key + Public Index Reveal) ---
