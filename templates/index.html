@@ -75,6 +75,14 @@
 
                     <div class="form-group" style="grid-column: 1 / -1; margin-top: -10px;">
                         <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="partial_orders" name="partial_orders" value="true"
+                                style="margin-right: 0.5rem; width: auto;">
+                            Enable Partial Orders (group concurrent same-timestamp events)
+                        </label>
+                    </div>
+
+                    <div class="form-group" style="grid-column: 1 / -1; margin-top: -10px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
                             <input type="checkbox" id="is_ocel" name="is_ocel" value="true"
                                 style="margin-right: 0.5rem; width: auto;"
                                 onchange="document.getElementById('ocel_options').style.display = this.checked ? 'block' : 'none';">
@@ -207,7 +215,8 @@
             const startPat = /(?:INFO.*:\s*)?RAW_RESULT Count:\s*(\d+)\s*Trace:/;
             const endPat = /(?:INFO.*:\s*)?END_TRACE/;
             const othersPat = /(?:INFO.*:\s*)?Others count \(below threshold\):\s*(\d+)/;
-            const valuePat = /(?:INFO.*:\s*)?(\d+)\s*$/;
+            // Two-column format: "act_id conc_bit" or single: "act_id"
+            const valuePat = /(?:INFO.*:\s*)?(\d+)(?:\s+(\d+))?\s*$/;
 
             lines.forEach(line => {
                 line = line.trim();
@@ -218,7 +227,6 @@
 
                 m = line.match(timerStopPat);
                 if (m) {
-                    // stepNumData[id] = { time, data, rounds }
                     const rounds = parseInt(m[4]);
                     stepNumData[m[1]] = { time: m[2] + "s", data: m[3] + " MB", rounds: rounds };
                     totalRounds += rounds;
@@ -244,10 +252,21 @@
 
                 if (line.match(endPat)) {
                     if (inTrace) {
-                        const readable = currentTrace
-                            .filter(id => id !== "0")
-                            .map(id => activityMap[id] || `Unknown(${id})`);
-                        results.push({ count: currentCount, trace: readable, type: 'trace' });
+                        // Build structured trace: array of steps, each step is array of activity names
+                        const steps = [];
+                        let currentSet = [];
+                        currentTrace.forEach(({actId, concBit}) => {
+                            if (actId === "0") return;
+                            const name = activityMap[actId] || `Unknown(${actId})`;
+                            if (concBit === "1" && currentSet.length > 0) {
+                                currentSet.push(name);
+                            } else {
+                                if (currentSet.length > 0) steps.push(currentSet);
+                                currentSet = [name];
+                            }
+                        });
+                        if (currentSet.length > 0) steps.push(currentSet);
+                        results.push({ count: currentCount, trace: steps, type: 'trace' });
                     }
                     inTrace = false;
                     return;
@@ -255,13 +274,13 @@
 
                 m = line.match(othersPat);
                 if (m) {
-                    results.push({ count: parseInt(m[1]), trace: ['<Others (Below Threshold)>'], type: 'others' });
+                    results.push({ count: parseInt(m[1]), trace: [['<Others (Below Threshold)>']], type: 'others' });
                     return;
                 }
 
                 if (inTrace) {
                     m = line.match(valuePat);
-                    if (m) currentTrace.push(m[1]);
+                    if (m) currentTrace.push({ actId: m[1], concBit: m[2] || "0" });
                 }
             });
 
@@ -398,6 +417,7 @@
             data.threads = parseInt(data.threads);
             data.k_anon = parseInt(data.k_anon);
             data.use_handovers = document.getElementById('use_handovers').checked;
+            data.partial_orders = document.getElementById('partial_orders').checked;
             data.is_ocel = document.getElementById('is_ocel').checked;
             data.flatten_type = document.getElementById('flatten_type').value;
 
@@ -505,8 +525,16 @@
                 const tr = document.createElement('tr');
                 const traceTd = document.createElement('td');
                 traceTd.className = 'trace-cell';
-                if (r.type === 'trace') traceTd.innerHTML = r.trace.join('<span class="arrow">&rarr;</span>');
-                else { traceTd.textContent = r.trace[0]; traceTd.style.color = 'var(--text-secondary)'; traceTd.style.fontStyle = 'italic'; }
+                if (r.type === 'trace') {
+                    traceTd.innerHTML = r.trace.map(step => {
+                        if (step.length === 1) return step[0];
+                        return '{' + step.join(', ') + '}';
+                    }).join('<span class="arrow">&rarr;</span>');
+                } else {
+                    traceTd.textContent = r.trace[0][0];
+                    traceTd.style.color = 'var(--text-secondary)';
+                    traceTd.style.fontStyle = 'italic';
+                }
 
                 const tdCount = document.createElement('td');
                 tdCount.textContent = r.count;
@@ -531,8 +559,8 @@
             sortDir = -sortDir;
             currentResults.sort((a, b) => {
                 if (key === 'count') return (a.count - b.count) * sortDir;
-                const sa = a.trace.join(' ');
-                const sb = b.trace.join(' ');
+                const sa = a.trace.map(s => s.join(',')).join(' ');
+                const sb = b.trace.map(s => s.join(',')).join(' ');
                 return sa.localeCompare(sb) * sortDir;
             });
             renderTable(currentResults);

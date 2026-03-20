@@ -1,5 +1,5 @@
 from Compiler.types import Array, Matrix, MemValue, regint, sint
-from Compiler.library import print_ln, for_range, if_, start_timer, stop_timer, for_range_opt_multithread
+from Compiler.library import print_ln, for_range, if_, start_timer, stop_timer, for_range_opt_multithread, for_range_opt
 from Compiler.GC.types import sbitint, sbit
 
 # --- CONFIGURATION ---
@@ -9,6 +9,7 @@ PARTIAL_LEN = 3
 N_THREADS = 16
 THRESHOLD = 1
 ENABLE_K_ANON = 0
+ENABLE_PARTIAL_ORDERS = 0
 
 # 1. Try to load from program.args (Standard MP-SPDZ)
 try:
@@ -48,12 +49,18 @@ try:
 except ValueError:
     pass
 
-print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON)
+try:
+    ENABLE_PARTIAL_ORDERS = int('NEON_ARG_ENABLE_PARTIAL_ORDERS')
+except ValueError:
+    pass
+
+print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s, PO=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON, ENABLE_PARTIAL_ORDERS)
 
 TOTAL_N = N_PER_PARTY * 2
-FULL_LEN = PARTIAL_LEN * 2         
+FULL_LEN = PARTIAL_LEN * 2
 COLS_PER_EVENT = 2
 ROW_WIDTH = 2 + (PARTIAL_LEN * COLS_PER_EVENT)
+ACT_BITS = 20  # Bits reserved for activity ID in composite sort key (supports up to ~1M activities)
 
 # FORCE BINARY TYPE
 sint64 = sbitint.get_type(64)
@@ -207,7 +214,11 @@ def main():
     print_ln("Reconstruction")
     #neon_timer: Reconstruction NEON_TIMER_RECON
     start_timer(NEON_TIMER_RECON)
-    merged_data = sint64.Matrix(TOTAL_N, 2 + FULL_LEN)
+    # Layout: [hash, is_invalid, act_0..act_{FULL_LEN-1}]
+    # When PO enabled, act_k stores packed value: activity_id | (conc_bit << 32)
+    #   conc_bit=1 means act_k shares a timestamp with act_{k-1} (same concurrent set)
+    MERGED_COLS = 2 + FULL_LEN
+    merged_data = sint64.Matrix(TOTAL_N, MERGED_COLS)
     merged_data.assign_all(0)
 
     MAX_TIME = 2**60 
@@ -230,17 +241,40 @@ def main():
         
         merged_data[i][1] = is_match ^ 1
         
+        # Sort keys and satellite arrays for the pruned bitonic merge.
+        # When ENABLE_PARTIAL_ORDERS: composite key (timestamp << ACT_BITS) | activity_id
+        #   sorts by timestamp first, then activity_id within ties → deterministic.
+        # When disabled: raw timestamps as sort keys (original behavior).
         sort_keys = [sint64(MAX_TIME) for _ in range(NEXT_POW2)]
-        sort_vals = [sint64(0) for _ in range(NEXT_POW2)]
-        
+        sort_vals_ts = [sint64(MAX_TIME) for _ in range(NEXT_POW2)]
+        sort_vals_act = [sint64(0) for _ in range(NEXT_POW2)]
+
         for k in range(PARTIAL_LEN):
-            sort_keys[k] = data[i][2 + k*2]
-            sort_vals[k] = data[i][2 + k*2 + 1]
-            
+            ts = data[i][2 + k*2]
+            act = data[i][2 + k*2 + 1]
+            if ENABLE_PARTIAL_ORDERS:
+                # Guard: (PAD_TIME << ACT_BITS) overflows sint64, so only
+                # compute composite key for real events; padding keeps MAX_TIME.
+                is_real = (ts != sint64(MAX_TIME))
+                composite = (ts << ACT_BITS) | act
+                sort_keys[k] = is_real.if_else(composite, sint64(MAX_TIME))
+            else:
+                sort_keys[k] = ts
+            sort_vals_ts[k] = ts
+            sort_vals_act[k] = act
+
         for k in range(PARTIAL_LEN):
             idx = NEXT_POW2 - 1 - k
-            sort_keys[idx] = data[i+1][2 + k*2]
-            sort_vals[idx] = data[i+1][2 + k*2 + 1]
+            ts = data[i+1][2 + k*2]
+            act = data[i+1][2 + k*2 + 1]
+            if ENABLE_PARTIAL_ORDERS:
+                is_real = (ts != sint64(MAX_TIME))
+                composite = (ts << ACT_BITS) | act
+                sort_keys[idx] = is_real.if_else(composite, sint64(MAX_TIME))
+            else:
+                sort_keys[idx] = ts
+            sort_vals_ts[idx] = ts
+            sort_vals_act[idx] = act
 
         # Track padding state (True = Known MAX_TIME)
         is_padding = [False] * NEXT_POW2
@@ -267,81 +301,96 @@ def main():
             batch_pairs = []
             batch_keys_a = []
             batch_keys_b = []
-            batch_vals_a = []
-            batch_vals_b = []
+            batch_ts_a = []
+            batch_ts_b = []
+            batch_act_a = []
+            batch_act_b = []
 
             for idx1, idx2 in pairs:
                 p1 = is_padding[idx1]
                 p2 = is_padding[idx2]
-                
+
                 if p1 and p2:
                     # Pad vs Pad -> Both MAX. No Swap needed. State Unchanged.
                     pass
-                    
+
                 elif not p1 and p2:
-                    # Data vs Pad (MAX).
-                    # Data < MAX is always True (Assuming Data != MAX).
-                    # Swap = 0 (A > B is False).
-                    # new_A = Min(A, B) = A (Data)
-                    # new_B = Max(A, B) = B (Pad)
-                    # Result: No Op (Data stays at idx1, Pad stays at idx2).
+                    # Data vs Pad (MAX). Data < MAX always. No swap needed.
                     pass
-                    
+
                 elif p1 and not p2:
-                    # Pad (MAX) vs Data.
-                    # MAX > Data is always True.
-                    # Swap = 1.
-                    # new_A = Min(A, B) = B (Data)
-                    # new_B = Max(A, B) = A (Pad)
-                    
-                    # Move Data from idx2 to idx1
+                    # Pad (MAX) vs Data. MAX > Data always. Swap.
                     sort_keys[idx1] = sort_keys[idx2]
-                    sort_vals[idx1] = sort_vals[idx2]
-                    
-                    # Restore Pad at idx2 (It effectively moved there)
+                    sort_vals_ts[idx1] = sort_vals_ts[idx2]
+                    sort_vals_act[idx1] = sort_vals_act[idx2]
+
                     sort_keys[idx2] = sint64(MAX_TIME)
-                    sort_vals[idx2] = sint64(0)
-                    
-                    # Update State
+                    sort_vals_ts[idx2] = sint64(MAX_TIME)
+                    sort_vals_act[idx2] = sint64(0)
+
                     is_padding[idx1] = False
                     is_padding[idx2] = True
-                    
-                else: 
+
+                else:
                     # Data vs Data -> Must Compare Obliviously
                     batch_pairs.append((idx1, idx2))
                     batch_keys_a.append(sort_keys[idx1])
                     batch_keys_b.append(sort_keys[idx2])
-                    batch_vals_a.append(sort_vals[idx1])
-                    batch_vals_b.append(sort_vals[idx2])
+                    batch_ts_a.append(sort_vals_ts[idx1])
+                    batch_ts_b.append(sort_vals_ts[idx2])
+                    batch_act_a.append(sort_vals_act[idx1])
+                    batch_act_b.append(sort_vals_act[idx2])
 
             # Process the accumulated "Data vs Data" batch
             if batch_pairs:
-                # Batch Compare
+                # Batch Compare (on composite keys)
                 swaps = [(a > b) for a, b in zip(batch_keys_a, batch_keys_b)]
-                
-                # Batch Mux
+
+                # Batch Mux — keys
                 new_keys_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_keys_a, batch_keys_b)]
                 new_keys_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_keys_a, batch_keys_b)]
-                
-                new_vals_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_vals_a, batch_vals_b)]
-                new_vals_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_vals_a, batch_vals_b)]
-                
+
+                # Batch Mux — timestamps
+                new_ts_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_ts_a, batch_ts_b)]
+                new_ts_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_ts_a, batch_ts_b)]
+
+                # Batch Mux — activity IDs
+                new_act_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_act_a, batch_act_b)]
+                new_act_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_act_a, batch_act_b)]
+
                 # Batch Write
-                for (idx1, idx2), ka, kb, va, vb in zip(batch_pairs, new_keys_a, new_keys_b, new_vals_a, new_vals_b):
-                    sort_keys[idx1] = ka
-                    sort_keys[idx2] = kb
-                    sort_vals[idx1] = va
-                    sort_vals[idx2] = vb
+                for idx, (idx1, idx2) in enumerate(batch_pairs):
+                    sort_keys[idx1] = new_keys_a[idx]
+                    sort_keys[idx2] = new_keys_b[idx]
+                    sort_vals_ts[idx1] = new_ts_a[idx]
+                    sort_vals_ts[idx2] = new_ts_b[idx]
+                    sort_vals_act[idx1] = new_act_a[idx]
+                    sort_vals_act[idx2] = new_act_b[idx]
             
             step //= 2
 
+        # Extract activities (packed with conc_bit when PO enabled)
         for k in range(FULL_LEN):
-            t = sort_keys[k]
-            a = sort_vals[k]
-            
-            is_padding = (t == MAX_TIME)
-            final_a = is_padding.if_else(sint64(0), a)
-            merged_data[i][2 + k] = is_match.if_else(final_a, sint64(0))
+            ts = sort_vals_ts[k]
+            act = sort_vals_act[k]
+
+            is_pad = (ts == sint64(MAX_TIME))
+            final_act = is_pad.if_else(sint64(0), act)
+
+            if ENABLE_PARTIAL_ORDERS:
+                if k == 0:
+                    # First position is never concurrent
+                    merged_data[i][2 + k] = is_match.if_else(final_act, sint64(0))
+                else:
+                    prev_ts = sort_vals_ts[k - 1]
+                    same_ts = (ts == prev_ts)
+                    both_valid = (ts != sint64(MAX_TIME)) & (prev_ts != sint64(MAX_TIME))
+                    is_conc = same_ts & both_valid
+                    # Pack: activity_id | (conc_bit << 32)
+                    packed = final_act | (is_conc << 32)
+                    merged_data[i][2 + k] = is_match.if_else(packed, sint64(0))
+            else:
+                merged_data[i][2 + k] = is_match.if_else(final_act, sint64(0))
     stop_timer(NEON_TIMER_RECON)
 
     # --- Step 4: Robust Binary Hashing ---
@@ -353,18 +402,31 @@ def main():
     @for_range_opt_multithread(N_THREADS, TOTAL_N)
     def _(i):
         h = sint64(0)
-        
-        # Note: Match bit and traces now start at index 1
-        for k in range(1 + FULL_LEN):
-            val = merged_data[i][1 + k]
-            h = h ^ val
-            h = h ^ (h << 10)
-            h = h ^ (h >> 6)
-            
+
+        if ENABLE_PARTIAL_ORDERS:
+            # Sequential hash on packed values (activity | conc_bit << 32).
+            # The composite sort key (ts << 20 | act) already canonicalizes the
+            # order within concurrent groups by activity ID, so a simple sequential
+            # hash is order-independent in practice.  The conc_bit distinguishes
+            # sequential A -> B from concurrent {A, B}.  All operations are XOR
+            # and shift — 0 AND gates, 0 communication, free.
+            for k in range(1 + FULL_LEN):
+                val = merged_data[i][1 + k]
+                h = h ^ val
+                h = h ^ (h << 10)
+                h = h ^ (h >> 6)
+        else:
+            # Original hash: match_bit + activity sequence
+            for k in range(1 + FULL_LEN):
+                val = merged_data[i][1 + k]
+                h = h ^ val
+                h = h ^ (h << 10)
+                h = h ^ (h >> 6)
+
         h = h ^ (h << 3)
         h = h ^ (h >> 11)
         h = h ^ (h << 15)
-        
+
         merged_data[i][0] = h
     stop_timer(NEON_TIMER_HASH)
 
@@ -470,16 +532,14 @@ def main():
     counts_list = revealed_counts.reveal()
     revealed_orig = masked_orig_idx.reveal()  # regint — safe for public indexing
 
-    # Pass 2: Build flat_traces using PUBLIC regint indices into merged_data
-    # Only kept rows read their actual trace; others read from index 0 (dummy)
+    # Pass 2: Build flat array for activities (packed with conc_bit when PO)
     flat_traces = Array(TOTAL_N * FULL_LEN, sint64)
     flat_traces.assign_all(0)
-    
+
     @for_range_opt_multithread(N_THREADS, TOTAL_N)
     def _(i):
-        public_keep = mask_list[i]  # regint 0 or 1
-        public_orig = revealed_orig[i]  # regint — public index into merged_data
-        
+        public_keep = mask_list[i]
+        public_orig = revealed_orig[i]
         @if_(public_keep)
         def _():
             for k in range(FULL_LEN):
@@ -487,17 +547,30 @@ def main():
 
     traces_list = flat_traces.reveal()
 
-    @for_range_opt(TOTAL_N)
-    def _(i):
-        do_print = mask_list[i]
-        
-        @if_(do_print)
-        def _():
-            print_ln("RAW_RESULT Count:%s Trace:", counts_list[i])
-            for k in range(FULL_LEN):
-                val = traces_list[i * FULL_LEN + k]
-                print_ln("%s", val)
-            print_ln("END_TRACE")
+    if ENABLE_PARTIAL_ORDERS:
+        @for_range_opt(TOTAL_N)
+        def _(i):
+            do_print = mask_list[i]
+            @if_(do_print)
+            def _():
+                print_ln("RAW_RESULT Count:%s Trace:", counts_list[i])
+                for k in range(FULL_LEN):
+                    packed = traces_list[i * FULL_LEN + k]
+                    act_val = packed & ((1 << 32) - 1)
+                    conc_val = packed >> 32
+                    print_ln("%s %s", act_val, conc_val)
+                print_ln("END_TRACE")
+    else:
+        @for_range_opt(TOTAL_N)
+        def _(i):
+            do_print = mask_list[i]
+            @if_(do_print)
+            def _():
+                print_ln("RAW_RESULT Count:%s Trace:", counts_list[i])
+                for k in range(FULL_LEN):
+                    val = traces_list[i * FULL_LEN + k]
+                    print_ln("%s", val)
+                print_ln("END_TRACE")
             
     if ENABLE_K_ANON:
         total_others = MemValue(sint64(0))

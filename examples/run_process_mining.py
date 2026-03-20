@@ -47,6 +47,7 @@ def main():
     parser.add_argument("--use-handovers", action="store_true", help="Filter out internal events and only compute on handover synchronization points")
     parser.add_argument("--is-ocel", action="store_true", help="Force OCEL processing (Approach 1)")
     parser.add_argument("--flatten-type", type=str, default="Container", help="Object type to flatten OCEL log on")
+    parser.add_argument("--partial-orders", type=int, default=0, help="Enable partial orders for concurrent events (0/1, default: 0)")
     args = parser.parse_args()
 
     # --- 1. Generate Inputs ---
@@ -143,20 +144,28 @@ def main():
     neon.set_substitution('NEON_ARG_N_THREADS', args.threads) 
     neon.set_substitution('NEON_ARG_THRESHOLD', args.threshold)
     neon.set_substitution('NEON_ARG_ENABLE_K_ANON', args.k_anon)
+    neon.set_substitution('NEON_ARG_ENABLE_PARTIAL_ORDERS', args.partial_orders)
     
     # Set Inputs
     neon.set_input(0, input_p0)
     neon.set_input(1, input_p1)
     
     # --- 4. Execute ---
-    print("--- Executing SMPC ---")
+    print("--- Executing SMPC (compile + run) ---")
+    import time
+    smpc_start = time.time()
     report = neon.smpc(
         direct=args.direct
     )
-    
+    smpc_wall = time.time() - smpc_start
+
     if report.run_was_successfull():
+        smpc_runtime = report.client_reports[0].total_runtime
+        compile_time = smpc_wall - smpc_runtime
         print("SMPC finished (successful)")
-        print(f"Runtime: {report.client_reports[0].total_runtime}s")
+        print(f"Compile time: {compile_time:.2f}s")
+        print(f"Runtime: {smpc_runtime}s")
+        print(f"Total (compile + run): {smpc_wall:.2f}s")
         
         # Parse output for Data Sent and Rounds
         try:

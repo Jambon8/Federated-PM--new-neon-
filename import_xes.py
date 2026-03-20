@@ -139,8 +139,10 @@ def parse_xes(filepath, use_handovers=False):
             max_time = max(t for t, act in full_events)
             events.append((max_time + 1, fingerprint_act))
         
-        # Sort events by timestamp to ensure local sorted invariant
-        events.sort(key=lambda x: x[0])
+        # Sort events by (timestamp, activity_name) to ensure local sorted invariant.
+        # Tiebreaking by activity_name makes the composite key (ts << 20 | act_id)
+        # monotonic within each party, which the bitonic merge requires.
+        events.sort(key=lambda x: (x[0], x[1]))
 
         if events:  # Only add traces that have events
             cases.append({'id': case_id, 'events': events})

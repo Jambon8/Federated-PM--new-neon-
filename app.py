@@ -67,7 +67,8 @@ def run_process_mining():
     is_ocel = data.get('is_ocel', False)
     flatten_type = data.get('flatten_type', 'Container')
     direct = data.get('direct', True)
-    
+    partial_orders = data.get('partial_orders', False)
+
     if not log_a or not log_b:
         return jsonify({"error": "Both Log A and Log B are required."}), 400
 
@@ -92,6 +93,9 @@ def run_process_mining():
         
     if not direct:
         cmd.append("--no-direct")
+
+    if partial_orders:
+        cmd.extend(["--partial-orders", "1"])
     
     if mode == "local-virtual" and network:
         cmd.extend(["--network", network])
