@@ -30,11 +30,12 @@ def decode_stream(input_stream):
     data_pattern = re.compile(r"Data sent = ([\d\.]+) MB")
     global_pattern = re.compile(r"Global data sent = ([\d\.]+) MB")
     others_pattern = re.compile(r"Others count \(below threshold\):\s*(\d+)")
+    dp_pattern = re.compile(r"DP_APPLIED Epsilon:(\d+)/(\d+)")
     
     benchmarks = {}
     step_times = {}
 
-    current_trace = []
+    current_trace = []  # list of (act_id, conc_bit)
     current_count = 0
     in_trace = False
 
@@ -43,7 +44,12 @@ def decode_stream(input_stream):
 
     for line in input_stream:
         line = line.strip()
-        
+        # Strip common log prefixes from dump.log files
+        for prefix in ("INFO (Local Client): ", "ERROR (Local Client): "):
+            if line.startswith(prefix):
+                line = line[len(prefix):]
+                break
+
         # Capture Benchmarks
         t_match = time_pattern.search(line)
         if t_match:
@@ -56,17 +62,17 @@ def decode_stream(input_stream):
             duration = timer_match.group(2)
             step_times[step_id] = duration + "s"
             continue
-            
+
         d_match = data_pattern.search(line)
         if d_match:
             benchmarks['Data Sent (Party 0)'] = d_match.group(1) + " MB"
             continue
-            
+
         g_match = global_pattern.search(line)
         if g_match:
             benchmarks['Global Data Sent'] = g_match.group(1) + " MB"
             continue
-        
+
         # Check for start of trace
         match = start_pattern.search(line)
         if match:
@@ -74,37 +80,56 @@ def decode_stream(input_stream):
             current_trace = []
             in_trace = True
             continue
-            
+
         # Check for end of trace
         if end_pattern.search(line):
             if in_trace:
-                # Filter out padding (0s) and decode
-                readable_trace = []
-                for act_id in current_trace:
+                # Build structured trace: list of steps, each step is a list of activity names
+                steps = []
+                current_set = []
+                for act_id, conc_bit in current_trace:
                     if act_id == "0":
-                        continue # Skip padding
-                    
-                    # Lookup ID in map, default to "Unknown(ID)" if missing
+                        continue
                     name = act_map.get(act_id, f"Unknown({act_id})")
-                    readable_trace.append(name)
-                
-                # Print formatted result
-                trace_str = " -> ".join(readable_trace)
+                    if conc_bit == "1" and current_set:
+                        current_set.append(name)
+                    else:
+                        if current_set:
+                            steps.append(current_set)
+                        current_set = [name]
+                if current_set:
+                    steps.append(current_set)
+
+                def format_step(step):
+                    if len(step) == 1:
+                        return step[0]
+                    return "{" + ", ".join(step) + "}"
+
+                trace_str = " -> ".join(format_step(s) for s in steps)
                 print(f"{current_count:<8} | {trace_str}")
-                
+
             in_trace = False
             continue
-            
-        # Collect Activity IDs
+
+        # Collect Activity IDs (two-column: "act_id conc_bit" or single: "act_id")
         if in_trace:
-            if line.isdigit():
-                current_trace.append(line)
+            parts = line.split()
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                current_trace.append((parts[0], parts[1]))
+            elif len(parts) == 1 and parts[0].isdigit():
+                current_trace.append((parts[0], "0"))
 
         # Check for Others count
         others_match = others_pattern.search(line)
         if others_match:
             count = others_match.group(1)
             print(f"{count:<8} | {'<Others (Below Threshold)>'}")
+
+        # Check for DP metadata
+        dp_match = dp_pattern.search(line)
+        if dp_match:
+            eps = int(dp_match.group(1)) / int(dp_match.group(2))
+            benchmarks['Differential Privacy'] = f"epsilon={eps}"
 
     # Print Benchmarks Footer
     if benchmarks or step_times:
