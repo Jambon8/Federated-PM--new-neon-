@@ -68,6 +68,7 @@ def run_process_mining():
     flatten_type = data.get('flatten_type', 'Container')
     direct = data.get('direct', True)
     partial_orders = data.get('partial_orders', False)
+    delta = data.get('delta', 1)
     enable_dp = data.get('enable_dp', False)
     epsilon = data.get('epsilon', 1.0)
 
@@ -97,7 +98,7 @@ def run_process_mining():
         cmd.append("--no-direct")
 
     if partial_orders:
-        cmd.extend(["--partial-orders", "1"])
+        cmd.extend(["--partial-orders", "1", "--delta", str(delta)])
 
     if enable_dp:
         cmd.extend(["--enable-dp", "1", "--epsilon", str(epsilon)])

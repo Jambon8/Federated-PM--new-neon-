@@ -103,7 +103,15 @@ def decode_stream(input_stream):
                 def format_step(step):
                     if len(step) == 1:
                         return step[0]
-                    return "{" + ", ".join(step) + "}"
+                    from collections import Counter
+                    counts = Counter(step)
+                    parts = []
+                    for name in sorted(counts):
+                        if counts[name] > 1:
+                            parts.append(f"{name}^{counts[name]}")
+                        else:
+                            parts.append(name)
+                    return "[" + ", ".join(parts) + "]"
 
                 trace_str = " -> ".join(format_step(s) for s in steps)
                 print(f"{current_count:<8} | {trace_str}")

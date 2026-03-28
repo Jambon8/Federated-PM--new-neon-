@@ -13,6 +13,7 @@ ENABLE_PARTIAL_ORDERS = 0
 ENABLE_DP = 0
 EPSILON_NUM = 1000   # epsilon = EPSILON_NUM / EPSILON_DEN
 EPSILON_DEN = 1000   # default: epsilon = 1.0
+DELTA = 1            # Concurrency window in seconds. 1 = exact timestamp equality.
 
 # 1. Try to load from program.args (Standard MP-SPDZ)
 try:
@@ -72,7 +73,12 @@ try:
 except ValueError:
     pass
 
-print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s, PO=%s, DP=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON, ENABLE_PARTIAL_ORDERS, ENABLE_DP)
+try:
+    DELTA = int('NEON_ARG_DELTA')
+except ValueError:
+    pass
+
+print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s, PO=%s, DP=%s, Delta=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON, ENABLE_PARTIAL_ORDERS, ENABLE_DP, DELTA)
 
 TOTAL_N = N_PER_PARTY * 2
 FULL_LEN = PARTIAL_LEN * 2
@@ -401,9 +407,10 @@ def main():
                     merged_data[i][2 + k] = is_match.if_else(final_act, sint64(0))
                 else:
                     prev_ts = sort_vals_ts[k - 1]
-                    same_ts = (ts == prev_ts)
+                    diff = ts - prev_ts
+                    is_close = (diff < sint64(DELTA))
                     both_valid = (ts != sint64(MAX_TIME)) & (prev_ts != sint64(MAX_TIME))
-                    is_conc = same_ts & both_valid
+                    is_conc = is_close & both_valid
                     # Pack: activity_id | (conc_bit << 32)
                     packed = final_act | (is_conc << 32)
                     merged_data[i][2 + k] = is_match.if_else(packed, sint64(0))

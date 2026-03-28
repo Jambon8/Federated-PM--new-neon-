@@ -2,10 +2,12 @@
 
 ## Problem
 
-Event logs record activities with timestamps. When two or more events within the same case share the same timestamp (e.g., lab tests ordered simultaneously), a total-order sort produces an **arbitrary** ordering. This causes two problems:
+Event logs record activities with timestamps. When two or more events within the same case occur at approximately the same time (e.g., lab tests ordered simultaneously), a total-order sort produces an **arbitrary** ordering. This causes two problems:
 
 1. **Non-determinism**: The same logical trace can produce different activity sequences depending on the party assignment and merge layout, leading to different hashes and inflated variant counts.
-2. **Loss of information**: Concurrent events (events that happen at the same time) are forced into a sequential order, hiding the true process structure.
+2. **Loss of information**: Concurrent events are forced into a sequential order, hiding the true process structure.
+
+The concurrency window is configurable via a **delta (Δ)** parameter in seconds. Events within Δ seconds of their predecessor in the sorted sequence are grouped as concurrent. With `Δ=1` (default), only events at the exact same timestamp are grouped. With `Δ=60`, events within one minute of each other are chained into a concurrent set.
 
 ### Example
 
@@ -19,7 +21,7 @@ A hospital case has three lab tests ordered at the same time:
 
 Without partial orders, these get an arbitrary sequential order like `CRP -> Leucocytes -> LacticAcid` or `Leucocytes -> CRP -> LacticAcid`. Two cases with the same labs may hash differently.
 
-With partial orders, they form a **concurrent set**: `{CRP, Leucocytes, LacticAcid}`, and all permutations are recognized as the same variant.
+With partial orders, they form a **concurrent multiset**: `[CRP, LacticAcid, Leucocytes]`, and all permutations are recognized as the same variant. Multiset notation `[...]` is used because duplicate activities can appear (e.g., `[Lab^3, X-ray]` for three lab tests and one X-ray at the same time).
 
 ### Real-World Impact (Sepsis Cases Event Log)
 
@@ -46,21 +48,21 @@ The 31x and 12x traces are the same process — triage, then two concurrent lab 
 31x  ... ER Sepsis Triage -> CRP -> Leucocytes               ─┐
 12x  ... ER Sepsis Triage -> Leucocytes -> CRP                ─┤ merged
 ─────────────────────────────────────────────────────────────────┘
-43x  ... ER Sepsis Triage -> {CRP, Leucocytes}
+43x  ... ER Sepsis Triage -> [CRP, Leucocytes]
 
 16x  ... ER Sepsis Triage -> CRP -> LacticAcid -> Leucocytes -> IV ...  ─┐
 14x  ... ER Sepsis Triage -> CRP -> Leucocytes -> LacticAcid -> IV ...  ─┤
  4x  ... ER Sepsis Triage -> Leucocytes -> CRP -> LacticAcid -> IV ...  ─┤ merged
  + more permutations                                                     ─┤
 ──────────────────────────────────────────────────────────────────────────┘
-41x  ... ER Sepsis Triage -> {CRP, LacticAcid, Leucocytes} -> IV Liquid -> IV Antibiotics
+41x  ... ER Sepsis Triage -> [CRP, LacticAcid, Leucocytes] -> IV Liquid -> IV Antibiotics
 
  6x  ... ER Sepsis Triage -> CRP -> Leucocytes -> LacticAcid   ─┐
  6x  ... ER Sepsis Triage -> CRP -> LacticAcid -> Leucocytes   ─┤
  4x  ... ER Sepsis Triage -> LacticAcid -> Leucocytes -> CRP   ─┤ merged
  + more permutations                                            ─┤
 ─────────────────────────────────────────────────────────────────┘
-20x  ... ER Sepsis Triage -> {CRP, LacticAcid, Leucocytes}
+20x  ... ER Sepsis Triage -> [CRP, LacticAcid, Leucocytes]
 ```
 
 Overall: **831 → 692 variants (-16.7%)**, with 685 out of 692 PO variants containing concurrent sets. All 1037 cases are preserved.
@@ -70,11 +72,11 @@ Overall: **831 → 692 variants (-16.7%)**, with 685 out of 692 PO variants cont
 Partial orders are implemented across preprocessing and three MPC pipeline stages:
 
 0. **Preprocessing** (`import_xes.py`): Events are sorted by `(timestamp, activity_name)` instead of just `timestamp`. This ensures same-timestamp events are in a canonical (alphabetical) order within each party's data, which the bitonic merge preserves.
-1. **Reconstruction** (Step 3): Composite sort keys `(timestamp << 20 | activity_id)` merge the two parties' events into a single canonically ordered sequence. Concurrent markers detect adjacent same-timestamp events and are packed into activity values.
+1. **Reconstruction** (Step 3): Composite sort keys `(timestamp << 20 | activity_id)` merge the two parties' events into a single canonically ordered sequence. Concurrent markers detect adjacent events within Δ seconds and pack them into activity values.
 2. **Hashing** (Step 4): Standard sequential Jenkins hash on packed values `(activity_id | conc_bit << 32)`. Since the preprocessing + composite sort already canonicalize order within concurrent groups, a simple sequential hash is order-independent in practice. The `conc_bit` distinguishes sequential from concurrent structure. **Zero AND gates — same cost as non-PO hashing.**
 3. **Output** (Step 6): Packed values are unpacked after reveal; two-column format (`activity_id concurrent_bit`) encodes the concurrent structure.
 
-The feature is **optional** — controlled by `--partial-orders 1` on the CLI or a checkbox in the web UI.
+The feature is **optional** — controlled by `--partial-orders 1 --delta <seconds>` on the CLI or a checkbox + slider in the web UI. Default delta is 1 (exact timestamp equality).
 
 ## Implementation Details
 
@@ -106,9 +108,9 @@ sort_keys[k] = is_real.if_else(composite, sint64(MAX_TIME))
 
 Padding events keep `MAX_TIME` as their sort key, staying at the end of the sorted array.
 
-### 2. Concurrent Markers (Packed Encoding)
+### 2. Concurrent Markers (Delta-Based, Packed Encoding)
 
-After sorting, adjacent events with equal timestamps are detected and the concurrent bit is packed directly into the activity value:
+After sorting, adjacent events within a configurable time window (Δ seconds) are detected as concurrent. The concurrent bit is packed directly into the activity value:
 
 ```python
 packed_value = activity_id | (conc_bit << 32)
@@ -116,7 +118,7 @@ packed_value = activity_id | (conc_bit << 32)
 
 Activity IDs use at most 20 bits (`ACT_BITS = 20`), so bit 32 is free. This keeps `merged_data` at the same width (`2 + FULL_LEN`) regardless of PO mode — no matrix width doubling.
 
-The concurrent detection logic:
+The concurrent detection logic uses **chaining**: if the time difference between adjacent events is less than Δ, they belong to the same concurrent group. This naturally chains — events A, B, C all end up in one group if the chain A→B and B→C are both within Δ:
 
 ```python
 for k in range(FULL_LEN):
@@ -124,30 +126,31 @@ for k in range(FULL_LEN):
         # First position: never concurrent, store activity only
         merged_data[i][2 + k] = final_act
     else:
-        same_ts = (ts[k] == ts[k-1])
+        diff = ts[k] - ts[k-1]
+        is_close = (diff < DELTA)   # Δ=1: exact equality; Δ>1: sliding window
         both_valid = (ts[k] != MAX_TIME) & (ts[k-1] != MAX_TIME)
-        is_conc = same_ts & both_valid
+        is_conc = is_close & both_valid
         packed = final_act | (is_conc << 32)
         merged_data[i][2 + k] = packed
 ```
 
-A `conc_bit = 1` means "this activity is in the same concurrent set as the previous position."
+A `conc_bit = 1` means "this activity is in the same concurrent set as the previous position." When `DELTA=1` (default), `diff < 1` is true only for `diff=0` (exact same timestamp) — identical to the original `ts == prev_ts` check, but **actually cheaper in MPC** (LTZ is constant-round ~2-3, while EQZ requires log(k) ~6-7 rounds).
 
-Example encoding of `A -> {B, C, D} -> E`:
+Example encoding of `A -> [B, C, D] -> E`:
 
 | Position | Stored Value | Activity | conc_bit | Meaning |
 |----------|-------------|----------|----------|---------|
 | 0 | A | A | 0 | Sequential |
 | 1 | B | B | 0 | Start of new group |
-| 2 | C \| (1 << 32) | C | 1 | Same group as B |
-| 3 | D \| (1 << 32) | D | 1 | Same group as B, C |
+| 2 | C \| (1 << 32) | C | 1 | Within Δ of B |
+| 3 | D \| (1 << 32) | D | 1 | Within Δ of C (chains to B) |
 | 4 | E | E | 0 | Sequential |
 
 ### 3. Hashing (Zero Overhead)
 
 The hash must treat `{B, C, D}` and `{D, B, C}` as identical. A naive approach would use an order-independent hash function (e.g., MSet-XOR-Hash [1]), but any such function requires `if_else` operations to detect group boundaries — each `if_else` costs 64 AND gates and requires network communication between parties.
 
-Instead, we exploit the fact that **the preprocessing sort + composite sort key already canonicalize the order within concurrent groups**. Events are sorted by `(timestamp, activity_name)` in `import_xes.py`, which maps to ascending activity IDs (since IDs are assigned alphabetically). The composite key `(ts << 20) | act_id` preserves this ordering through the bitonic merge. So `{CRP, LacticAcid, Leucocytes}` always appears as `CRP, LacticAcid, Leucocytes` (IDs 3, 9, 10) — never in any other order.
+Instead, we exploit the fact that **the preprocessing sort + composite sort key already canonicalize the order within concurrent groups**. Events are sorted by `(timestamp, activity_name)` in `import_xes.py`, which maps to ascending activity IDs (since IDs are assigned alphabetically). The composite key `(ts << 20) | act_id` preserves this ordering through the bitonic merge. So `[CRP, LacticAcid, Leucocytes]` always appears as `CRP, LacticAcid, Leucocytes` (IDs 3, 9, 10) — never in any other order.
 
 This means a **standard sequential Jenkins hash** [2] on the packed values `(activity_id | conc_bit << 32)` is sufficient:
 
@@ -193,11 +196,13 @@ RAW_RESULT Count:46 Trace:
 END_TRACE
 ```
 
-The decoders (`decode_output.py`, `api_helper.py`) parse this and render concurrent sets with `{...}` notation:
+The decoders (`decode_output.py`, `api_helper.py`) parse this and render concurrent multisets with `[...]` notation, collapsing duplicates with `^N`:
 
 ```
-46       | CRP -> {Leucocytes, LacticAcid}
+46       | CRP -> [LacticAcid, Leucocytes]
 ```
+
+If duplicate activities occur in the same concurrent group (e.g., three lab tests of the same type), they display as `[Lab^3, X-ray]`.
 
 ## Performance
 
@@ -228,7 +233,7 @@ Instead, the preprocessing step in `import_xes.py` sorts events by `(timestamp, 
 
 The remaining PO overhead (+25s runtime) comes from **reconstruction** (+24.1s):
 - Composite key construction: 1 comparison (`is_real`) + 1 `if_else` per event for the overflow guard
-- Concurrent marker detection: 2 equality checks + 1 AND + 1 `if_else` per position for comparing adjacent timestamps
+- Concurrent marker detection: 1 subtraction + 1 less-than + 1 AND + 1 `if_else` per position for comparing adjacent timestamps against Δ
 - Three satellite arrays carried through the bitonic merge (keys, timestamps, activities) instead of two (keys, activities)
 
 Communication overhead (+53% data sent) comes from the additional AND gates in reconstruction — each AND gate requires the parties to exchange secret-shared bits.
@@ -260,13 +265,13 @@ Sepsis Cases shows a 16.7% reduction because lab tests (CRP, Leucocytes, LacticA
 | File | Change |
 |------|--------|
 | `import_xes.py` | Pre-sort events by `(timestamp, activity_name)` for canonical ordering |
-| `Programs/process_mining.mpc` | Composite sort key, packed concurrent markers, sequential hash on packed values, unified output |
-| `decode_output.py` | Two-column parsing, `{A, B}` rendering, diagnostic line filtering |
+| `Programs/process_mining.mpc` | Composite sort key, delta-based concurrent markers, sequential hash on packed values, unified output |
+| `decode_output.py` | Two-column parsing, `[A^N, B]` multiset rendering, diagnostic line filtering |
 | `api_helper.py` | Two-column parsing, structured trace output for web UI |
-| `examples/run_process_mining.py` | `--partial-orders` flag, NEON substitution |
-| `app.py` | Checkbox in web UI, pass-through to CLI |
-| `templates/index.html` | JS parser for concurrent sets, UI checkbox |
-| `eval/baseline.py` | Matching Python implementation for correctness testing |
+| `examples/run_process_mining.py` | `--partial-orders`, `--delta` flags, NEON substitutions |
+| `app.py` | Checkbox + delta slider in web UI, pass-through to CLI |
+| `templates/index.html` | JS parser for concurrent sets, multiset rendering with `^N`, delta slider UI |
+| `eval/baseline.py` | Matching Python implementation with delta parameter for correctness testing |
 
 ## References
 

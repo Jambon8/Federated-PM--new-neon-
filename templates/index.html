@@ -76,9 +76,19 @@
                     <div class="form-group" style="grid-column: 1 / -1; margin-top: -10px;">
                         <label style="display: flex; align-items: center; cursor: pointer;">
                             <input type="checkbox" id="partial_orders" name="partial_orders" value="true"
-                                style="margin-right: 0.5rem; width: auto;">
-                            Enable Partial Orders (group concurrent same-timestamp events)
+                                style="margin-right: 0.5rem; width: auto;"
+                                onchange="document.getElementById('po_options').style.display = this.checked ? 'block' : 'none';">
+                            Enable Partial Orders (group concurrent events within time window)
                         </label>
+                        <div id="po_options" style="display: none; margin-top: 10px; margin-left: 25px;">
+                            <label for="delta">Delta (&Delta;) seconds: <strong id="delta_display">1</strong></label>
+                            <input type="range" id="delta" name="delta" min="0" max="300" step="1" value="1"
+                                style="width: 250px;"
+                                oninput="document.getElementById('delta_display').textContent = this.value;">
+                            <span style="font-size: 0.85em; color: var(--text-secondary); margin-left: 0.5rem;">
+                                (0 = disabled, 1 = exact timestamp, &gt;1 = window)
+                            </span>
+                        </div>
                     </div>
 
                     <div class="form-group" style="grid-column: 1 / -1; margin-top: -10px;">
@@ -433,6 +443,7 @@
             data.k_anon = parseInt(data.k_anon);
             data.use_handovers = document.getElementById('use_handovers').checked;
             data.partial_orders = document.getElementById('partial_orders').checked;
+            data.delta = parseInt(document.getElementById('delta').value);
             data.enable_dp = document.getElementById('enable_dp').checked;
             data.epsilon = parseFloat(document.getElementById('epsilon').value);
             data.is_ocel = document.getElementById('is_ocel').checked;
@@ -545,7 +556,12 @@
                 if (r.type === 'trace') {
                     traceTd.innerHTML = r.trace.map(step => {
                         if (step.length === 1) return step[0];
-                        return '{' + step.join(', ') + '}';
+                        const counts = {};
+                        step.forEach(n => { counts[n] = (counts[n] || 0) + 1; });
+                        const parts = Object.keys(counts).sort().map(n =>
+                            counts[n] > 1 ? n + '^' + counts[n] : n
+                        );
+                        return '[' + parts.join(', ') + ']';
                     }).join('<span class="arrow">&rarr;</span>');
                 } else {
                     traceTd.textContent = r.trace[0][0];
