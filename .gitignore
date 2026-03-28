@@ -23,3 +23,14 @@ docs/build/
 config/debug_logging.conf
 
 MIGRATION_NOTES.md
+
+# Claude Code config
+.claude/
+CLAUDE.md
+
+# Evaluation
+eval/
+eval_results/
+
+# Presentations
+presentation/
