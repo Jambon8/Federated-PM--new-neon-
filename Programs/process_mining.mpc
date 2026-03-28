@@ -416,6 +416,9 @@ def main():
                     merged_data[i][2 + k] = is_match.if_else(packed, sint64(0))
             else:
                 merged_data[i][2 + k] = is_match.if_else(final_act, sint64(0))
+    # Last row has no adjacent pair to match against — mark as invalid.
+    merged_data[TOTAL_N - 1][1] = sint64(1)
+
     stop_timer(NEON_TIMER_RECON)
 
     # --- Step 4: Robust Binary Hashing ---
