@@ -68,6 +68,8 @@ def run_process_mining():
     flatten_type = data.get('flatten_type', 'Container')
     direct = data.get('direct', True)
     partial_orders = data.get('partial_orders', False)
+    enable_dp = data.get('enable_dp', False)
+    epsilon = data.get('epsilon', 1.0)
 
     if not log_a or not log_b:
         return jsonify({"error": "Both Log A and Log B are required."}), 400
@@ -96,7 +98,10 @@ def run_process_mining():
 
     if partial_orders:
         cmd.extend(["--partial-orders", "1"])
-    
+
+    if enable_dp:
+        cmd.extend(["--enable-dp", "1", "--epsilon", str(epsilon)])
+
     if mode == "local-virtual" and network:
         cmd.extend(["--network", network])
     

@@ -48,6 +48,8 @@ def main():
     parser.add_argument("--is-ocel", action="store_true", help="Force OCEL processing (Approach 1)")
     parser.add_argument("--flatten-type", type=str, default="Container", help="Object type to flatten OCEL log on")
     parser.add_argument("--partial-orders", type=int, default=0, help="Enable partial orders for concurrent events (0/1, default: 0)")
+    parser.add_argument("--enable-dp", type=int, default=0, help="Enable Differential Privacy (0/1, default: 0)")
+    parser.add_argument("--epsilon", type=float, default=1.0, help="DP epsilon parameter (default: 1.0)")
     args = parser.parse_args()
 
     # --- 1. Generate Inputs ---
@@ -145,7 +147,11 @@ def main():
     neon.set_substitution('NEON_ARG_THRESHOLD', args.threshold)
     neon.set_substitution('NEON_ARG_ENABLE_K_ANON', args.k_anon)
     neon.set_substitution('NEON_ARG_ENABLE_PARTIAL_ORDERS', args.partial_orders)
-    
+    neon.set_substitution('NEON_ARG_ENABLE_DP', args.enable_dp)
+    epsilon_num = int(args.epsilon * 1000)
+    neon.set_substitution('NEON_ARG_EPSILON_NUM', epsilon_num)
+    neon.set_substitution('NEON_ARG_EPSILON_DEN', 1000)
+
     # Set Inputs
     neon.set_input(0, input_p0)
     neon.set_input(1, input_p1)

@@ -10,6 +10,9 @@ N_THREADS = 16
 THRESHOLD = 1
 ENABLE_K_ANON = 0
 ENABLE_PARTIAL_ORDERS = 0
+ENABLE_DP = 0
+EPSILON_NUM = 1000   # epsilon = EPSILON_NUM / EPSILON_DEN
+EPSILON_DEN = 1000   # default: epsilon = 1.0
 
 # 1. Try to load from program.args (Standard MP-SPDZ)
 try:
@@ -54,7 +57,22 @@ try:
 except ValueError:
     pass
 
-print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s, PO=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON, ENABLE_PARTIAL_ORDERS)
+try:
+    ENABLE_DP = int('NEON_ARG_ENABLE_DP')
+except ValueError:
+    pass
+
+try:
+    EPSILON_NUM = int('NEON_ARG_EPSILON_NUM')
+except ValueError:
+    pass
+
+try:
+    EPSILON_DEN = int('NEON_ARG_EPSILON_DEN')
+except ValueError:
+    pass
+
+print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s, PO=%s, DP=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON, ENABLE_PARTIAL_ORDERS, ENABLE_DP)
 
 TOTAL_N = N_PER_PARTY * 2
 FULL_LEN = PARTIAL_LEN * 2
@@ -484,6 +502,60 @@ def main():
     c_counts[TOTAL_N - 1] = current_group_count.read()
     stop_timer(NEON_TIMER_GROUP_COUNT)
     stop_timer(NEON_TIMER_GROUP)
+
+    # --- Step 5.5: Differential Privacy (Discrete Laplace Noise) ---
+    if ENABLE_DP:
+        import math
+        print_ln("--- Adding Differential Privacy Noise (epsilon=%s/%s) ---", EPSILON_NUM, EPSILON_DEN)
+        #neon_timer: DP Noise NEON_TIMER_DP_NOISE
+        start_timer(NEON_TIMER_DP_NOISE)
+
+        # Compile-time computation of Bernoulli parameters
+        epsilon = EPSILON_NUM / EPSILON_DEN
+        p_float = math.exp(-epsilon)  # probability for geometric distribution
+        M_BITS = 32  # precision of Bernoulli coin
+        P_SCALED = int(p_float * (2**M_BITS))
+        MAX_NOISE = max(16, int(math.ceil(-math.log(1e-6) / epsilon)))
+
+        # Use M_BITS+1 so sign bit is always 0 (unsigned comparison)
+        # Without this, sbitint signed comparison treats half the random
+        # values as negative, inflating Bernoulli success probability.
+        sintM = sbitint.get_type(M_BITS + 1)
+
+        # Helper: sample Geometric(1-p) — counts consecutive Bernoulli(p) successes
+        # Returns sint64 in [0, MAX_NOISE]
+        def sample_geometric():
+            running = sbit(1)
+            G = sint64(0)
+            for trial in range(MAX_NOISE):
+                # Bernoulli(p): generate M_BITS random bits, compare against threshold
+                random_bits = [sbit.get_random_bit() for _ in range(M_BITS)]
+                R = sintM.bit_compose(random_bits)
+                coin = (R < sintM(P_SCALED))  # 1 with probability p
+                still_running = running & coin
+                increment = still_running.if_else(sint64(1), sint64(0))
+                G = G + increment
+                running = still_running
+            return G
+
+        # Apply discrete Laplace noise: noise = G1 - G2 where G1, G2 ~ Geometric(1-p)
+        @for_range_opt(TOTAL_N)
+        def _(i):
+            G1 = sample_geometric()
+            G2 = sample_geometric()
+            noise = G1 - G2
+
+            noisy = c_counts[i] + noise
+            # Clamp to 0 (no negative counts)
+            is_neg = (noisy < sint64(0))
+            clamped = is_neg.if_else(sint64(0), noisy)
+
+            # Only apply to group representatives (is_last[i] == 1)
+            is_rep = (is_last[i] != sint64(0))
+            c_counts[i] = is_rep.if_else(clamped, c_counts[i])
+
+        stop_timer(NEON_TIMER_DP_NOISE)
+        print_ln("DP_APPLIED Epsilon:%s/%s", EPSILON_NUM, EPSILON_DEN)
 
     # --- Output (Narrow-Key + Public Index Reveal) ---
     print_ln("--- [TIMESTAMP] Starting Step 6: Output (Batch Reveal) ---")
