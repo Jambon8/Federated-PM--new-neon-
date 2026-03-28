@@ -39,8 +39,12 @@ def parse_output(output_lines, map_file="Player-Data/activity_map.json"):
     current_count = 0
     in_trace = False
 
+    # Regex to strip MP-SPDZ log prefixes like "INFO (Local Client): "
+    log_prefix_re = re.compile(r'^(?:INFO|DEBUG|WARNING|ERROR)\s*\([^)]*\):\s*')
+
     for line in output_lines:
         line = line.strip()
+        line = log_prefix_re.sub('', line)
 
         # --- Benchmarks ---
         t_match = TIME_PATTERN.search(line)
