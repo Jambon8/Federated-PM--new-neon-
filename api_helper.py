@@ -11,7 +11,7 @@ TIMER_PATTERN = re.compile(r"Time(\d+)\s*=\s*([\d\.e\-\+]+)\s*seconds")
 DATA_PATTERN = re.compile(r"Data sent = ([\d\.]+) MB")
 GLOBAL_PATTERN = re.compile(r"Global data sent = ([\d\.]+) MB")
 OTHERS_PATTERN = re.compile(r"Others count \(below threshold\):\s*(\d+)")
-DP_PATTERN = re.compile(r"DP_APPLIED Epsilon:(\d+)/(\d+)")
+DP_PATTERN = re.compile(r"DP_APPLIED Epsilon:(\d+)/(\d+)(?: K:(\d+))?")
 
 def load_activity_map(map_file="Player-Data/activity_map.json"):
     """Loads the activity map from JSON file."""
@@ -129,7 +129,11 @@ def parse_output(output_lines, map_file="Player-Data/activity_map.json"):
         dp_match = DP_PATTERN.search(line)
         if dp_match:
             eps = int(dp_match.group(1)) / int(dp_match.group(2))
-            benchmarks['Differential Privacy'] = f"epsilon={eps}"
+            k = int(dp_match.group(3)) if dp_match.group(3) else None
+            dp_str = f"epsilon={eps}"
+            if k is not None:
+                dp_str += f", k={k}"
+            benchmarks['Differential Privacy'] = dp_str
 
     # Format step times
     if step_times:

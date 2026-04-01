@@ -71,6 +71,7 @@ def run_process_mining():
     delta = data.get('delta', 1)
     enable_dp = data.get('enable_dp', False)
     epsilon = data.get('epsilon', 1.0)
+    dp_delta = data.get('dp_delta', 0.01)
 
     if not log_a or not log_b:
         return jsonify({"error": "Both Log A and Log B are required."}), 400
@@ -101,7 +102,7 @@ def run_process_mining():
         cmd.extend(["--partial-orders", "1", "--delta", str(delta)])
 
     if enable_dp:
-        cmd.extend(["--enable-dp", "1", "--epsilon", str(epsilon)])
+        cmd.extend(["--enable-dp", "1", "--epsilon", str(epsilon), "--dp-delta", str(dp_delta)])
 
     if mode == "local-virtual" and network:
         cmd.extend(["--network", network])

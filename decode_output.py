@@ -30,7 +30,7 @@ def decode_stream(input_stream):
     data_pattern = re.compile(r"Data sent = ([\d\.]+) MB")
     global_pattern = re.compile(r"Global data sent = ([\d\.]+) MB")
     others_pattern = re.compile(r"Others count \(below threshold\):\s*(\d+)")
-    dp_pattern = re.compile(r"DP_APPLIED Epsilon:(\d+)/(\d+)")
+    dp_pattern = re.compile(r"DP_APPLIED Epsilon:(\d+)/(\d+)(?: K:(\d+))?")
     
     benchmarks = {}
     step_times = {}
@@ -137,7 +137,11 @@ def decode_stream(input_stream):
         dp_match = dp_pattern.search(line)
         if dp_match:
             eps = int(dp_match.group(1)) / int(dp_match.group(2))
-            benchmarks['Differential Privacy'] = f"epsilon={eps}"
+            k = int(dp_match.group(3)) if dp_match.group(3) else None
+            dp_str = f"epsilon={eps}"
+            if k is not None:
+                dp_str += f", k={k}"
+            benchmarks['Differential Privacy'] = dp_str
 
     # Print Benchmarks Footer
     if benchmarks or step_times:

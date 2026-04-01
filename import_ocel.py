@@ -19,7 +19,9 @@ PAD_TIME = 2**60
 PAD_ACT = 0
 PAD_ID = 2**60
 
-def parse_ocel(filepath, flatten_type="Container", use_handovers=False):
+GRANULARITY_MS = {'ms': 1, 's': 1000, 'm': 60_000, 'h': 3_600_000}
+
+def parse_ocel(filepath, flatten_type="Container", use_handovers=False, timestamp_granularity=1):
     print(f"Reading OCEL {filepath}... (Flatten on: '{flatten_type}', Use Handovers: {use_handovers})")
     try:
         with open(filepath, 'r') as f:
@@ -42,7 +44,8 @@ def parse_ocel(filepath, flatten_type="Container", use_handovers=False):
         if ts_str:
             try:
                 dt = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
-                timestamp = int(dt.timestamp())
+                timestamp = int(dt.timestamp() * 1000)
+                timestamp = (timestamp // timestamp_granularity) * timestamp_granularity
             except ValueError:
                 pass
                 
@@ -166,10 +169,13 @@ if __name__ == "__main__":
     parser.add_argument("--use-handovers", action="store_true")
     # By default, flatten on "Container"
     parser.add_argument("--flatten-type", default="Container")
+    parser.add_argument("--timestamp-granularity", choices=['ms', 's', 'm', 'h'], default='ms',
+                        help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). Both parties must use the same value.")
     args = parser.parse_args()
+    granularity = GRANULARITY_MS[args.timestamp_granularity]
 
-    log_a = parse_ocel(args.file_a, args.flatten_type, args.use_handovers)
-    log_b = parse_ocel(args.file_b, args.flatten_type, args.use_handovers)
+    log_a = parse_ocel(args.file_a, args.flatten_type, args.use_handovers, timestamp_granularity=granularity)
+    log_b = parse_ocel(args.file_b, args.flatten_type, args.use_handovers, timestamp_granularity=granularity)
     
     if not log_a or not log_b:
         print("Failed to load logs.")

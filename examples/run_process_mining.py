@@ -19,6 +19,19 @@ logger = logging.getLogger("Driver")
 import argparse
 import importlib.util
 
+_GRANULARITY_MS = {'ms': 1, 's': 1000, 'm': 60_000, 'h': 3_600_000}
+
+def _parse_delta(s):
+    import re
+    s = s.strip()
+    if s == '0':
+        return 0  # exact equality sentinel — uses EQZ in MPC (cheaper than LTZ)
+    m = re.fullmatch(r'(\d+)(ms|s|m|h)', s)
+    if not m:
+        raise argparse.ArgumentTypeError(f"Invalid delta '{s}'. Use: 0 (exact equality), 500ms, 10s, 1m, 2h")
+    value, unit = int(m.group(1)), m.group(2)
+    return value * _GRANULARITY_MS[unit]
+
 # ... (Imports remain same)
 
 def import_source_file(fname, modname):
@@ -29,6 +42,21 @@ def import_source_file(fname, modname):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+def compute_dp_k(epsilon, dp_delta):
+    """Compute partition selection threshold k from (epsilon, delta).
+    Definition 5 of Rafiei et al. (ICPM 2022), based on Desfontaines et al. (2022).
+    k = ceil((1/epsilon) * ln((e^epsilon + 2*delta - 1) / (delta * (e^epsilon + 1))))
+    """
+    import math
+    e_eps = math.exp(epsilon)
+    numerator = e_eps + 2 * dp_delta - 1
+    denominator = dp_delta * (e_eps + 1)
+    if denominator <= 0 or numerator <= 0:
+        raise ValueError(f"Invalid DP parameters: epsilon={epsilon}, delta={dp_delta}")
+    k = math.ceil((1.0 / epsilon) * math.log(numerator / denominator))
+    return max(1, k)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run Process Mining SMPC with Neon")
@@ -48,10 +76,18 @@ def main():
     parser.add_argument("--is-ocel", action="store_true", help="Force OCEL processing (Approach 1)")
     parser.add_argument("--flatten-type", type=str, default="Container", help="Object type to flatten OCEL log on")
     parser.add_argument("--partial-orders", type=int, default=0, help="Enable partial orders for concurrent events (0/1, default: 0)")
-    parser.add_argument("--delta", type=int, default=1, help="Concurrency time window in seconds (default: 1 = exact timestamp match)")
+    parser.add_argument("--delta", type=_parse_delta, default='0',
+                        help="Concurrency time window (default: 0 = exact timestamp equality, cheapest). Accepts: 0, 500ms, 10s, 1m, 2h")
+    parser.add_argument("--timestamp-granularity", choices=['ms', 's', 'm', 'h'], default='ms',
+                        help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). Both parties must agree on the same value.")
     parser.add_argument("--enable-dp", type=int, default=0, help="Enable Differential Privacy (0/1, default: 0)")
     parser.add_argument("--epsilon", type=float, default=1.0, help="DP epsilon parameter (default: 1.0)")
+    parser.add_argument("--dp-delta", type=float, default=0.01,
+                        help="DP delta parameter for (eps,delta)-DP partition selection (default: 0.01)")
+    parser.add_argument("--max-cases-per-individual", type=int, default=1,
+                        help="Contribution bounding: max cases per individual (default: 1, sensitivity=1)")
     args = parser.parse_args()
+    ts_granularity = _GRANULARITY_MS[args.timestamp_granularity]
 
     # --- 1. Generate Inputs ---
     is_ocel = args.is_ocel or args.log_a.lower().endswith(".json")
@@ -78,13 +114,13 @@ def main():
     # Execute generation logic directly
     print(f"Reading {args.log_a}...")
     if is_ocel:
-        cases_a = importer.parse_ocel(args.log_a, flatten_type=args.flatten_type, use_handovers=args.use_handovers)
+        cases_a = importer.parse_ocel(args.log_a, flatten_type=args.flatten_type, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
         print(f"Reading {args.log_b}...")
-        cases_b = importer.parse_ocel(args.log_b, flatten_type=args.flatten_type, use_handovers=args.use_handovers)
+        cases_b = importer.parse_ocel(args.log_b, flatten_type=args.flatten_type, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
     else:
-        cases_a = importer.parse_xes(args.log_a, use_handovers=args.use_handovers)
+        cases_a = importer.parse_xes(args.log_a, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
         print(f"Reading {args.log_b}...")
-        cases_b = importer.parse_xes(args.log_b, use_handovers=args.use_handovers)
+        cases_b = importer.parse_xes(args.log_b, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
     
     # encode_and_save returns (n_max, max_len)
     n_per_party, partial_len = importer.encode_and_save(cases_a, cases_b)
@@ -148,11 +184,31 @@ def main():
     neon.set_substitution('NEON_ARG_THRESHOLD', args.threshold)
     neon.set_substitution('NEON_ARG_ENABLE_K_ANON', args.k_anon)
     neon.set_substitution('NEON_ARG_ENABLE_PARTIAL_ORDERS', args.partial_orders)
-    neon.set_substitution('NEON_ARG_DELTA', args.delta)
+    neon.set_substitution('NEON_ARG_DELTA', args.delta)  # already in ms
     neon.set_substitution('NEON_ARG_ENABLE_DP', args.enable_dp)
     epsilon_num = int(args.epsilon * 1000)
     neon.set_substitution('NEON_ARG_EPSILON_NUM', epsilon_num)
     neon.set_substitution('NEON_ARG_EPSILON_DEN', 1000)
+
+    # (epsilon, delta)-DP partition selection (TraVaS, Rafiei et al. ICPM 2022)
+    # k serves as both noise truncation bound and frequency threshold
+    if args.enable_dp:
+        # Contribution bounding: if k_max > 1, sensitivity = k_max
+        # Scale epsilon down by k_max so each individual gets epsilon-DP
+        k_max = args.max_cases_per_individual
+        effective_epsilon = args.epsilon / k_max
+        if k_max > 1:
+            print(f"Contribution bounding: k_max={k_max}, effective epsilon={effective_epsilon:.4f} (from {args.epsilon})")
+        dp_k = compute_dp_k(effective_epsilon, args.dp_delta)
+        print(f"DP partition selection: epsilon={effective_epsilon}, delta={args.dp_delta}, k={dp_k}")
+        neon.set_substitution('NEON_ARG_DP_K', dp_k)
+        # Override threshold: k and threshold must be coupled for (eps,delta)-DP guarantee
+        neon.set_substitution('NEON_ARG_THRESHOLD', dp_k)
+        # Pass effective epsilon to MPC (scaled by contribution bound)
+        epsilon_num = int(effective_epsilon * 1000)
+        neon.set_substitution('NEON_ARG_EPSILON_NUM', epsilon_num)
+    else:
+        neon.set_substitution('NEON_ARG_DP_K', 0)
 
     # Set Inputs
     neon.set_input(0, input_p0)

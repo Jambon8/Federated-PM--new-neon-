@@ -407,8 +407,13 @@ def main():
                     merged_data[i][2 + k] = is_match.if_else(final_act, sint64(0))
                 else:
                     prev_ts = sort_vals_ts[k - 1]
-                    diff = ts - prev_ts
-                    is_close = (diff < sint64(DELTA))
+                    if DELTA == 0:
+                        # Exact equality: EQZ (XOR-tree) — cheaper than LTZ
+                        is_close = (ts == prev_ts)
+                    else:
+                        # Sliding window: LTZ via subtraction (parallel prefix adder)
+                        diff = ts - prev_ts
+                        is_close = (diff < sint64(DELTA))
                     both_valid = (ts != sint64(MAX_TIME)) & (prev_ts != sint64(MAX_TIME))
                     is_conc = is_close & both_valid
                     # Pack: activity_id | (conc_bit << 32)

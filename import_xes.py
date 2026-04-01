@@ -24,7 +24,10 @@ PAD_TIME = 2**60
 PAD_ACT = 0
 PAD_ID = 2**60 # Use Max 64-bit value for ID padding to stay sorted at end
 
-def parse_xes(filepath, use_handovers=False):
+# Timestamp granularity options: name -> milliseconds
+GRANULARITY_MS = {'ms': 1, 's': 1000, 'm': 60_000, 'h': 3_600_000}
+
+def parse_xes(filepath, use_handovers=False, timestamp_granularity=1):
     """Parses .xes.gz and returns list of cases: {'id': str, 'events': [(time, act), ...]}"""
     print(f"Reading {filepath}... (Use Handovers: {use_handovers})")
     
@@ -93,7 +96,8 @@ def parse_xes(filepath, use_handovers=False):
                     try:
                         # Simplified parser (strips timezone for integer conversion)
                         dt = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
-                        timestamp = int(dt.timestamp())
+                        timestamp = int(dt.timestamp() * 1000)
+                        timestamp = (timestamp // timestamp_granularity) * timestamp_granularity
                     except ValueError:
                         pass # Handle format errors if needed
             
@@ -256,16 +260,21 @@ def encode_and_save(cases_a, cases_b):
 
 if __name__ == "__main__":
     # You can also pass file paths as arguments
-    if len(sys.argv) >= 3:
-        FILE_A = sys.argv[1]
-        FILE_B = sys.argv[2]
-    else:
-        print("Error: Please provide two XES file paths as arguments")
-        print("Usage: python3 import_xes.py <file_a.xes[.gz]> <file_b.xes[.gz]>")
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file_a")
+    parser.add_argument("file_b")
+    parser.add_argument("--use-handovers", action="store_true")
+    parser.add_argument("--timestamp-granularity", choices=['ms', 's', 'm', 'h'], default='ms',
+                        help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). Both parties must use the same value.")
+    args = parser.parse_args()
 
-    log_a = parse_xes(FILE_A)
-    log_b = parse_xes(FILE_B)
+    FILE_A = args.file_a
+    FILE_B = args.file_b
+    granularity = GRANULARITY_MS[args.timestamp_granularity]
+
+    log_a = parse_xes(FILE_A, use_handovers=args.use_handovers, timestamp_granularity=granularity)
+    log_b = parse_xes(FILE_B, use_handovers=args.use_handovers, timestamp_granularity=granularity)
     
     if not log_a or not log_b:
         print("Failed to load logs.")
