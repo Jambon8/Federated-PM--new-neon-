@@ -13,7 +13,8 @@ ENABLE_PARTIAL_ORDERS = 0
 ENABLE_DP = 0
 EPSILON_NUM = 1000   # epsilon = EPSILON_NUM / EPSILON_DEN
 EPSILON_DEN = 1000   # default: epsilon = 1.0
-DELTA = 1            # Concurrency window in seconds. 1 = exact timestamp equality.
+DP_K = 0             # Partition selection threshold k, derived from (epsilon, delta) in Python
+DELTA = 0            # Concurrency window in ms. 0 = exact equality (EQZ, cheaper); >0 = sliding window (LTZ).
 
 # 1. Try to load from program.args (Standard MP-SPDZ)
 try:
@@ -78,13 +79,18 @@ try:
 except ValueError:
     pass
 
-print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s, PO=%s, DP=%s, Delta=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON, ENABLE_PARTIAL_ORDERS, ENABLE_DP, DELTA)
+try:
+    DP_K = int('NEON_ARG_DP_K')
+except ValueError:
+    pass
+
+print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s, PO=%s, DP=%s, Delta=%s, DP_K=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON, ENABLE_PARTIAL_ORDERS, ENABLE_DP, DELTA, DP_K)
 
 TOTAL_N = N_PER_PARTY * 2
 FULL_LEN = PARTIAL_LEN * 2
 COLS_PER_EVENT = 2
 ROW_WIDTH = 2 + (PARTIAL_LEN * COLS_PER_EVENT)
-ACT_BITS = 20  # Bits reserved for activity ID in composite sort key (supports up to ~1M activities)
+ACT_BITS = 17  # Bits reserved for activity ID in composite sort key (supports up to 131072 activities)
 
 # FORCE BINARY TYPE
 sint64 = sbitint.get_type(64)
@@ -518,10 +524,14 @@ def main():
     stop_timer(NEON_TIMER_GROUP_COUNT)
     stop_timer(NEON_TIMER_GROUP)
 
-    # --- Step 5.5: Differential Privacy (Discrete Laplace Noise) ---
+    # --- Step 5.5: (epsilon, delta)-DP Partition Selection via k-TSGD ---
+    # Rafiei et al. (ICPM 2022), based on Desfontaines et al. (2022).
+    # k (= DP_K) is computed in Python from (epsilon, delta) and serves as both
+    # the noise truncation bound and the frequency threshold (coupled for the
+    # (epsilon, delta)-DP guarantee). THRESHOLD is set to k by the Python driver.
     if ENABLE_DP:
         import math
-        print_ln("--- Adding Differential Privacy Noise (epsilon=%s/%s) ---", EPSILON_NUM, EPSILON_DEN)
+        print_ln("--- Adding DP Noise (epsilon=%s/%s, k=%s) ---", EPSILON_NUM, EPSILON_DEN, DP_K)
         #neon_timer: DP Noise NEON_TIMER_DP_NOISE
         start_timer(NEON_TIMER_DP_NOISE)
 
@@ -530,31 +540,64 @@ def main():
         p_float = math.exp(-epsilon)  # probability for geometric distribution
         M_BITS = 32  # precision of Bernoulli coin
         P_SCALED = int(p_float * (2**M_BITS))
-        MAX_NOISE = max(16, int(math.ceil(-math.log(1e-6) / epsilon)))
+        # k serves as truncation bound: noise ~ k-TSGD(p, k) in [-k, k]
+        MAX_NOISE = DP_K
 
         # Use M_BITS+1 so sign bit is always 0 (unsigned comparison)
         # Without this, sbitint signed comparison treats half the random
         # values as negative, inflating Bernoulli success probability.
         sintM = sbitint.get_type(M_BITS + 1)
 
-        # Helper: sample Geometric(1-p) — counts consecutive Bernoulli(p) successes
-        # Returns sint64 in [0, MAX_NOISE]
-        def sample_geometric():
-            running = sbit(1)
-            G = sint64(0)
-            for trial in range(MAX_NOISE):
-                # Bernoulli(p): generate M_BITS random bits, compare against threshold
-                random_bits = [sbit.get_random_bit() for _ in range(M_BITS)]
-                R = sintM.bit_compose(random_bits)
-                coin = (R < sintM(P_SCALED))  # 1 with probability p
-                still_running = running & coin
-                increment = still_running.if_else(sint64(1), sint64(0))
-                G = G + increment
-                running = still_running
-            return G
+        # Adaptive geometric sampling: bit-decomposed (O(log k)) vs sequential (O(k))
+        # Bit j of Geometric(1-p) is independent Bernoulli with prob p^(2^j)/(1+p^(2^j))
+        # (Ghosh et al. STOC 2009, Champion et al. CCS 2019).
+        # Precision requirement: p^(2^n_bits) < 2^(-M_BITS) to match Bernoulli precision.
+        n_bits_required = int(math.ceil(math.log2(max(2, M_BITS * math.log(2) / epsilon))))
+        n_bits_required = max(n_bits_required, int(math.ceil(math.log2(MAX_NOISE + 1))))
+        # +1 accounts for the additional clamp comparison in the bit-decomposed path
+        USE_BITDECOMP = (n_bits_required + 1 < MAX_NOISE)
 
-        # Apply discrete Laplace noise: noise = G1 - G2 where G1, G2 ~ Geometric(1-p)
-        @for_range_opt(TOTAL_N)
+        if USE_BITDECOMP:
+            print_ln("DP sampling: bit-decomposed (%s bits vs k=%s sequential)", n_bits_required, MAX_NOISE)
+            # Precompute per-bit thresholds at compile time
+            bit_thresholds = []
+            for j in range(n_bits_required):
+                p_j = (p_float ** (2**j)) / (1.0 + p_float ** (2**j))
+                bit_thresholds.append(int(p_j * (2**M_BITS)))
+
+            def sample_geometric():
+                G = sint64(0)
+                for j in range(n_bits_required):
+                    random_bits = [sbit.get_random_bit() for _ in range(M_BITS)]
+                    R = sintM.bit_compose(random_bits)
+                    bit_val = (R < sintM(bit_thresholds[j]))
+                    G = G + bit_val.if_else(sint64(2**j), sint64(0))
+                # Clamp to MAX_NOISE (handles tail of untruncated geometric)
+                over = (G > sint64(MAX_NOISE))
+                G = over.if_else(sint64(MAX_NOISE), G)
+                return G
+        else:
+            print_ln("DP sampling: sequential (%s trials, bit-decomp would need %s bits)", MAX_NOISE, n_bits_required)
+            # Helper: sample Geometric(1-p) truncated at k via sequential Bernoulli trials
+            # Returns sint64 in [0, k]
+            def sample_geometric():
+                running = sbit(1)
+                G = sint64(0)
+                for trial in range(MAX_NOISE):
+                    # Bernoulli(p): generate M_BITS random bits, compare against threshold
+                    random_bits = [sbit.get_random_bit() for _ in range(M_BITS)]
+                    R = sintM.bit_compose(random_bits)
+                    coin = (R < sintM(P_SCALED))  # 1 with probability p
+                    still_running = running & coin
+                    increment = still_running.if_else(sint64(1), sint64(0))
+                    G = G + increment
+                    running = still_running
+                return G
+
+        # Apply k-TSGD noise: noise = G1 - G2 where G1, G2 ~ Geometric(1-p) truncated at k
+        # Threshold filtering (count > k) happens in the output phase using THRESHOLD = k
+        # Multithreaded: each row's noise is independent (no cross-iteration dependencies)
+        @for_range_opt_multithread(N_THREADS, TOTAL_N)
         def _(i):
             G1 = sample_geometric()
             G2 = sample_geometric()
@@ -570,7 +613,7 @@ def main():
             c_counts[i] = is_rep.if_else(clamped, c_counts[i])
 
         stop_timer(NEON_TIMER_DP_NOISE)
-        print_ln("DP_APPLIED Epsilon:%s/%s", EPSILON_NUM, EPSILON_DEN)
+        print_ln("DP_APPLIED Epsilon:%s/%s K:%s", EPSILON_NUM, EPSILON_DEN, DP_K)
 
     # --- Output (Narrow-Key + Public Index Reveal) ---
     print_ln("--- [TIMESTAMP] Starting Step 6: Output (Batch Reveal) ---")
