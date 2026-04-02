@@ -336,7 +336,7 @@ This was fixed by using `sbitint.get_type(M_BITS + 1)` (33 bits), ensuring the s
 
 3. **Single query**: The current implementation applies DP to one query (variant frequency). If the same dataset is queried multiple times with different parameters, the privacy budget must be composed accordingly (basic composition: total epsilon = sum of per-query epsilons).
 
-4. **Group privacy (mitigated)**: Sensitivity = 1 assumes one case per individual. If an individual contributes multiple cases, group privacy applies (effective epsilon scales linearly with the number of cases per individual). **Mitigation**: The `--max-cases-per-individual k_max` flag in `examples/run_process_mining.py` implements contribution bounding: each party truncates cases per individual to k_max before MPC, and noise is calibrated to sensitivity k_max (effective epsilon = epsilon / k_max). Default: k_max=1 (standard assumption).
+4. **Group privacy**: Sensitivity = 1 assumes one case per individual. If an individual contributes multiple cases, the effective epsilon scales linearly with the number of cases. This is the standard assumption in existing DP process mining work (TraVaS, PRIPEL) and holds for the evaluated datasets.
 
 5. **Delta interpretation**: The delta parameter bounds the probability of catastrophic privacy failure. A common guideline is delta << 1/n where n is the dataset size [1]. For BPI 2013 with ~1600 total cases, delta = 0.001 (< 1/1600) is appropriate; delta = 0.5 is too permissive.
 

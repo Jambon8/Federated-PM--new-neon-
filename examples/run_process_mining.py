@@ -84,8 +84,6 @@ def main():
     parser.add_argument("--epsilon", type=float, default=1.0, help="DP epsilon parameter (default: 1.0)")
     parser.add_argument("--dp-delta", type=float, default=0.01,
                         help="DP delta parameter for (eps,delta)-DP partition selection (default: 0.01)")
-    parser.add_argument("--max-cases-per-individual", type=int, default=1,
-                        help="Contribution bounding: max cases per individual (default: 1, sensitivity=1)")
     args = parser.parse_args()
     ts_granularity = _GRANULARITY_MS[args.timestamp_granularity]
 
@@ -193,20 +191,11 @@ def main():
     # (epsilon, delta)-DP partition selection (TraVaS, Rafiei et al. ICPM 2022)
     # k serves as both noise truncation bound and frequency threshold
     if args.enable_dp:
-        # Contribution bounding: if k_max > 1, sensitivity = k_max
-        # Scale epsilon down by k_max so each individual gets epsilon-DP
-        k_max = args.max_cases_per_individual
-        effective_epsilon = args.epsilon / k_max
-        if k_max > 1:
-            print(f"Contribution bounding: k_max={k_max}, effective epsilon={effective_epsilon:.4f} (from {args.epsilon})")
-        dp_k = compute_dp_k(effective_epsilon, args.dp_delta)
-        print(f"DP partition selection: epsilon={effective_epsilon}, delta={args.dp_delta}, k={dp_k}")
+        dp_k = compute_dp_k(args.epsilon, args.dp_delta)
+        print(f"DP partition selection: epsilon={args.epsilon}, delta={args.dp_delta}, k={dp_k}")
         neon.set_substitution('NEON_ARG_DP_K', dp_k)
         # Override threshold: k and threshold must be coupled for (eps,delta)-DP guarantee
         neon.set_substitution('NEON_ARG_THRESHOLD', dp_k)
-        # Pass effective epsilon to MPC (scaled by contribution bound)
-        epsilon_num = int(effective_epsilon * 1000)
-        neon.set_substitution('NEON_ARG_EPSILON_NUM', epsilon_num)
     else:
         neon.set_substitution('NEON_ARG_DP_K', 0)
 
