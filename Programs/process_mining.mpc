@@ -186,10 +186,7 @@ def main():
                 for c in range(ROW_WIDTH):
                     val_a = padded_data[idx1][c]
                     val_b = padded_data[idx2][c]
-                    new_a = swap.if_else(val_b, val_a)
-                    new_b = swap.if_else(val_a, val_b)
-                    padded_data[idx1][c] = new_a
-                    padded_data[idx2][c] = new_b
+                    padded_data[idx1][c], padded_data[idx2][c] = swap.cond_swap(val_a, val_b)
             step //= 2
 
         # Copy Result Back
@@ -262,10 +259,7 @@ def main():
                     for c in range(ROW_WIDTH):
                         val_a = padded_iter[idx1][c]
                         val_b = padded_iter[idx2][c]
-                        new_a = swap.if_else(val_b, val_a)
-                        new_b = swap.if_else(val_a, val_b)
-                        padded_iter[idx1][c] = new_a
-                        padded_iter[idx2][c] = new_b
+                        padded_iter[idx1][c], padded_iter[idx2][c] = swap.cond_swap(val_a, val_b)
                 step //= 2
 
             # Copy sorted result back to data[0..total_size-1]
@@ -339,12 +333,10 @@ def main():
 
             if batch_pairs:
                 swaps = [(a > b) for a, b in zip(batch_keys_a, batch_keys_b)]
-                new_keys_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_keys_a, batch_keys_b)]
-                new_keys_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_keys_a, batch_keys_b)]
-                new_ts_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_ts_a, batch_ts_b)]
-                new_ts_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_ts_a, batch_ts_b)]
-                new_act_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_act_a, batch_act_b)]
-                new_act_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_act_a, batch_act_b)]
+                # cond_swap: shared XOR, 64 AND per array instead of 128
+                new_keys_a, new_keys_b = zip(*[s.cond_swap(a, b) for s, a, b in zip(swaps, batch_keys_a, batch_keys_b)]) if swaps else ([], [])
+                new_ts_a, new_ts_b = zip(*[s.cond_swap(a, b) for s, a, b in zip(swaps, batch_ts_a, batch_ts_b)]) if swaps else ([], [])
+                new_act_a, new_act_b = zip(*[s.cond_swap(a, b) for s, a, b in zip(swaps, batch_act_a, batch_act_b)]) if swaps else ([], [])
                 for idx, (idx1, idx2) in enumerate(batch_pairs):
                     sort_keys[idx1] = new_keys_a[idx]
                     sort_keys[idx2] = new_keys_b[idx]
