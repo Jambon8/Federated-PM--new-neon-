@@ -493,10 +493,9 @@ def main():
                     all_distinct = all_distinct & (data[row_a][1] != data[row_b][1])
 
             is_match = is_end & all_distinct  # sint64, value 0 or 1
-            merged_data[i][1] = sint64(1) - is_match
-            # Create 64-bit mask for cheap bitwise AND masking in extract_activities
-            # Negate: 0 → 0x0, 1 → 0xFFFF...FFFF (all-ones in two's complement)
-            is_match_mask = sint64(0) - is_match
+            merged_data[i][1] = is_match ^ sint64(1)  # flip 0↔1 (XOR, 0 AND)
+            # Create 64-bit mask: 0 → 0x0, 1 → 0xFFFF...FFFF
+            is_match_mask = ~is_match + sint64(1)  # NOT + add (189 AND vs 256)
 
             # --- Iterative bitonic merge of N_PARTIES * PARTIAL_LEN events ---
             # Each party's events are pre-sorted ascending by timestamp.
