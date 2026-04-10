@@ -14,10 +14,11 @@ BASE_DIR = os.getcwd()
 if not os.path.exists("Player-Data"):
     os.makedirs("Player-Data")
 
-OUTPUT_A = os.path.join(BASE_DIR, "Player-Data/Input-P0-0")
-OUTPUT_B = os.path.join(BASE_DIR, "Player-Data/Input-P1-0")
-OUTPUT_A_BIN = os.path.join(BASE_DIR, "Player-Data/Input-Binary-P0-0")
-OUTPUT_B_BIN = os.path.join(BASE_DIR, "Player-Data/Input-Binary-P1-0")
+def party_file(p):
+    return os.path.join(BASE_DIR, f"Player-Data/Input-P{p}-0")
+
+def party_file_bin(p):
+    return os.path.join(BASE_DIR, f"Player-Data/Input-Binary-P{p}-0")
 
 # Padding values for empty slots
 PAD_TIME = 2**60
@@ -153,75 +154,65 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1):
         
     return cases
 
-def encode_and_save(cases_a, cases_b):
-    """Aligns dictionaries and writes MPC input files"""
-    
-    # 1. Build Global Dictionaries (Shared Context)
-    # In a real Federated setup, this requires a secure set intersection protocol.
-    # For this demo, we compute it in the clear.
-    
-    # --- BITONIC MERGE PREPARATION ---
-    # Party 0 sorted ASCENDING
-    cases_a.sort(key=lambda c: c['id'])
-    # Party 1 sorted DESCENDING
-    cases_b.sort(key=lambda c: c['id'], reverse=True)
-    print("Sorted inputs for Bitonic Merge: P0 (Asc), P1 (Desc)")
-    # ---------------------------------
+def encode_and_save(cases_list):
+    """Aligns dictionaries and writes MPC input files for N parties.
 
-    all_case_ids = set(c['id'] for c in cases_a + cases_b)
-    all_activities = set(e[1] for c in cases_a + cases_b for e in c['events'])
-    
-    # Create Mappings
+    Args:
+        cases_list: list of N case lists, one per party.
+                    Each element is a list of {'id': str, 'events': [(time, act), ...]}.
+    Returns:
+        (n_max, max_len) — dimensions for MPC configuration.
+    """
+    n_parties = len(cases_list)
+
+    # --- Sorting for iterative bitonic merge ---
+    # P0: ascending by case_id. P1..Pk-1: descending (for bitonic merge).
+    cases_list[0].sort(key=lambda c: c['id'])
+    for p in range(1, n_parties):
+        cases_list[p].sort(key=lambda c: c['id'], reverse=True)
+    if n_parties == 2:
+        print("Sorted inputs for Bitonic Merge: P0 (Asc), P1 (Desc)")
+    else:
+        print(f"Sorted inputs for Iterative Bitonic Merge: P0 (Asc), P1..P{n_parties-1} (Desc)")
+
+    # 1. Build Global Dictionaries
+    all_cases = [c for party in cases_list for c in party]
+    all_case_ids = set(c['id'] for c in all_cases)
+    all_activities = set(e[1] for c in all_cases for e in c['events'])
+
     case_id_map = {cid: i+1 for i, cid in enumerate(sorted(all_case_ids))}
     act_map = {act: i+1 for i, act in enumerate(sorted(all_activities))}
 
-    # --- NEW: Save Mapping to JSON ---
-    # Invert map: ID -> Name
+    # Save mapping to JSON
     id_to_act = {v: k for k, v in act_map.items()}
     with open("Player-Data/activity_map.json", "w") as f:
         json.dump(id_to_act, f)
     print("Saved Activity Mapping to 'Player-Data/activity_map.json'")
-    # ---------------------------------
 
     print(f"Mapped {len(all_case_ids)} Cases, {len(all_activities)} Activities.")
-    # ... rest of function ...
 
-    # --- INSERT THIS BLOCK ---
     print("\n--- ACTIVITY DECODER RING ---")
-    # Sort by ID so we can look them up easily
     sorted_acts = sorted(act_map.items(), key=lambda item: item[1])
     for name, id in sorted_acts:
         print(f"ID {id}: '{name}'")
     print("-----------------------------\n")
-    # -------------------------
-    
+
     print(f"Found {len(all_case_ids)} unique Cases and {len(all_activities)} unique Activities.")
 
-    # 2. Determine Dimensions
-    max_len_a = max(len(c['events']) for c in cases_a) if cases_a else 0
-    max_len_b = max(len(c['events']) for c in cases_b) if cases_b else 0
-    max_len = max(max_len_a, max_len_b)
-    
-    n_a = len(cases_a)
-    n_b = len(cases_b)
-    n_max = max(n_a, n_b) # We pad the number of rows to match
-    
-    print(f"Configuration for MPC: N_PER_PARTY={n_max}, PARTIAL_LEN={max_len}")
-    
+    # 2. Determine Dimensions (max across all parties)
+    max_len = max((max((len(c['events']) for c in party), default=0) for party in cases_list), default=0)
+    n_max = max(len(party) for party in cases_list)
+
+    print(f"Configuration for MPC: N_PER_PARTY={n_max}, PARTIAL_LEN={max_len}, N_PARTIES={n_parties}")
+
     # 3. Write Inputs
     def write_party_file(filename, filename_bin, cases, target_n, target_len, pad_at_start=False):
         """Write both text and binary input files for MP-SPDZ"""
-        # Write text file (space-separated values, one row per line)
         with open(filename, 'w') as f:
-            # Prepare all rows first
             all_rows = []
-            
-            # Real Data Rows
+
             for c in cases:
-                row = []
-                # Case ID
-                row.append(case_id_map.get(c['id'], 0))
-                # Events
+                row = [case_id_map.get(c['id'], 0)]
                 for j in range(target_len):
                     if j < len(c['events']):
                         t, act = c['events'][j]
@@ -231,63 +222,59 @@ def encode_and_save(cases_a, cases_b):
                         row.append(PAD_TIME)
                         row.append(PAD_ACT)
                 all_rows.append(row)
-            
-            # Padding Rows
+
             pad_needed = target_n - len(cases)
             padding_row = [PAD_ID] + [PAD_TIME, PAD_ACT] * target_len
-            
-            final_rows = []
+
             if pad_at_start:
                 final_rows = [padding_row] * pad_needed + all_rows
             else:
                 final_rows = all_rows + [padding_row] * pad_needed
 
-            # Write to file
             for row in final_rows:
                  f.write(" ".join(map(str, row)) + "\n")
-        
-        # Write binary file (little-endian 64-bit integers)
+
         with open(filename_bin, 'wb') as f:
             for row in final_rows:
                 for value in row:
                     f.write(struct.pack('<q', value))
-            
-    write_party_file(OUTPUT_A, OUTPUT_A_BIN, cases_a, n_max, max_len, pad_at_start=False)
-    write_party_file(OUTPUT_B, OUTPUT_B_BIN, cases_b, n_max, max_len, pad_at_start=True)
-    
-    print("Input files (text and binary) generated successfully.")
+
+    # P0: ascending, padding at end. P1..Pk-1: descending, padding at start.
+    for p in range(n_parties):
+        pad_at_start = (p > 0)
+        write_party_file(party_file(p), party_file_bin(p), cases_list[p],
+                         n_max, max_len, pad_at_start=pad_at_start)
+
+    print(f"Input files for {n_parties} parties generated successfully.")
     return n_max, max_len
 
 if __name__ == "__main__":
-    # You can also pass file paths as arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("file_a")
-    parser.add_argument("file_b")
+    parser.add_argument("logs", nargs='+', help="Paths to XES log files (one per party, minimum 2)")
     parser.add_argument("--use-handovers", action="store_true")
     parser.add_argument("--timestamp-granularity", choices=['ms', 's', 'm', 'h'], default='ms',
-                        help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). Both parties must use the same value.")
+                        help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). All parties must use the same value.")
     args = parser.parse_args()
 
-    FILE_A = args.file_a
-    FILE_B = args.file_b
-    granularity = GRANULARITY_MS[args.timestamp_granularity]
-
-    log_a = parse_xes(FILE_A, use_handovers=args.use_handovers, timestamp_granularity=granularity)
-    log_b = parse_xes(FILE_B, use_handovers=args.use_handovers, timestamp_granularity=granularity)
-    
-    if not log_a or not log_b:
-        print("Failed to load logs.")
+    if len(args.logs) < 2:
+        print("Error: At least 2 log files required.")
         sys.exit(1)
-        
-    # Limit to first 20 cases for testing
-    #MAX_CASES = 50
-    #log_a = log_a[:MAX_CASES]
-    #log_b = log_b[:MAX_CASES]
 
-    n, length = encode_and_save(log_a, log_b)
-    
+    granularity = GRANULARITY_MS[args.timestamp_granularity]
+    cases_list = []
+    for path in args.logs:
+        cases = parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=granularity)
+        if not cases:
+            print(f"Failed to load log: {path}")
+            sys.exit(1)
+        cases_list.append(cases)
+
+    n, length = encode_and_save(cases_list)
+
+    n_parties = len(cases_list)
     print("\n!!! UPDATE YOUR .mpc FILE WITH THESE VALUES !!!")
     print(f"N_PER_PARTY = {n}")
     print(f"PARTIAL_LEN = {length}")
-    print(f"FULL_LEN = {length * 2}")
+    print(f"N_PARTIES = {n_parties}")
+    print(f"FULL_LEN = {length * n_parties}")

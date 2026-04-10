@@ -63,8 +63,9 @@ def main():
     parser.add_argument("--threshold", type=int, default=1, help="Filtering threshold (default: 1)")
     parser.add_argument("--threads", type=int, default=16, help="Number of threads (default: 16)")
     parser.add_argument("--k-anon", type=int, default=0, help="Enable K-Anonymity (0/1, default: 0)")
-    parser.add_argument("--log-a", type=str, default="/home/jamil/Documents/Master_Input/OrgA/BPI_Challenge_2013_open_problems.xes.gz", help="Path to existing log A")
-    parser.add_argument("--log-b", type=str, default="/home/jamil/Documents/Master_Input/OrgB/BPI_Challenge_2013_open_problems.xes.gz", help="Path to existing log B")
+    parser.add_argument("--log-a", type=str, default=None, help="Path to log A (2-party shorthand)")
+    parser.add_argument("--log-b", type=str, default=None, help="Path to log B (2-party shorthand)")
+    parser.add_argument("--logs", nargs='+', default=None, help="Paths to N log files (one per party, minimum 2)")
     parser.add_argument("--mode", type=str, choices=["local", "local-virtual"], default="local", help="Operation mode (default: local)")
     parser.add_argument("--delay", type=str, default=None, help="Manual Network delay (e.g. '20ms') - overrides preset if set")
     parser.add_argument("--network", type=str, default=None, choices=["unlimited", "lan", "wan-ent", "wan-fast", "wan-slow", "5g-avg", "5g-slow"], help="Network Preset Profile")
@@ -87,17 +88,31 @@ def main():
     args = parser.parse_args()
     ts_granularity = _GRANULARITY_MS[args.timestamp_granularity]
 
+    # --- Resolve log paths ---
+    if args.logs:
+        log_paths = args.logs
+    elif args.log_a and args.log_b:
+        log_paths = [args.log_a, args.log_b]
+    else:
+        # Default 2-party paths
+        log_paths = [
+            "/home/jamil/Documents/Master_Input/OrgA/BPI_Challenge_2013_open_problems.xes.gz",
+            "/home/jamil/Documents/Master_Input/OrgB/BPI_Challenge_2013_open_problems.xes.gz",
+        ]
+    n_parties = len(log_paths)
+    if n_parties < 2:
+        print("Error: At least 2 log files required.")
+        sys.exit(1)
+
     # --- 1. Generate Inputs ---
-    is_ocel = args.is_ocel or args.log_a.lower().endswith(".json")
+    is_ocel = args.is_ocel or log_paths[0].lower().endswith(".json")
     script_name = "import_ocel.py" if is_ocel else "import_xes.py"
     module_name = "import_ocel" if is_ocel else "import_xes"
-    print(f"--- Generating Inputs with {script_name} ---")
-    
-    # Ensure Player-Data exists
+    print(f"--- Generating Inputs with {script_name} ({n_parties} parties) ---")
+
     os.makedirs("Player-Data", exist_ok=True)
-    
-    # Find import script
-    import_path = f"./{script_name}" 
+
+    import_path = f"./{script_name}"
     if not os.path.exists(import_path):
         if os.path.exists(f"Programs/{script_name}"):
             import_path = f"Programs/{script_name}"
@@ -106,33 +121,27 @@ def main():
         else:
             raise FileNotFoundError(f"Could not find {script_name}")
 
-    # Import as a module
     importer = import_source_file(import_path, module_name)
 
-    # Execute generation logic directly
-    print(f"Reading {args.log_a}...")
-    if is_ocel:
-        cases_a = importer.parse_ocel(args.log_a, flatten_type=args.flatten_type, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
-        print(f"Reading {args.log_b}...")
-        cases_b = importer.parse_ocel(args.log_b, flatten_type=args.flatten_type, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
-    else:
-        cases_a = importer.parse_xes(args.log_a, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
-        print(f"Reading {args.log_b}...")
-        cases_b = importer.parse_xes(args.log_b, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
-    
-    # encode_and_save returns (n_max, max_len)
-    n_per_party, partial_len = importer.encode_and_save(cases_a, cases_b)
-    
-    print(f"Dynamic Config derived from inputs: N_PER_PARTY={n_per_party}, PARTIAL_LEN={partial_len}")
-    
+    cases_list = []
+    for p, path in enumerate(log_paths):
+        print(f"Reading P{p}: {path}...")
+        if is_ocel:
+            cases = importer.parse_ocel(path, flatten_type=args.flatten_type, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
+        else:
+            cases = importer.parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
+        cases_list.append(cases)
+
+    n_per_party, partial_len = importer.encode_and_save(cases_list)
+
+    print(f"Dynamic Config: N_PER_PARTY={n_per_party}, PARTIAL_LEN={partial_len}, N_PARTIES={n_parties}")
+
     # --- 2. Read Inputs ---
-    with open("Player-Data/Input-P0-0", "r") as f:
-        input_p0 = f.read().strip()
-    
-    with open("Player-Data/Input-P1-0", "r") as f:
-        input_p1 = f.read().strip()
-        
-    print(f"Read inputs: P0 ({len(input_p0)} chars), P1 ({len(input_p1)} chars)")
+    inputs = {}
+    for p in range(n_parties):
+        with open(f"Player-Data/Input-P{p}-0", "r") as f:
+            inputs[p] = f.read().strip()
+        print(f"Read input P{p}: {len(inputs[p])} chars")
 
     # --- 3. Setup Neon ---
     print("--- Setting up Neon ---")
@@ -172,7 +181,7 @@ def main():
 
     # Use SemiBin protocol
     neon.set_protocol(protocol.Semi)
-    neon.set_number_of_parties(2)
+    neon.set_number_of_parties(n_parties)
     neon.set_program("process_mining")
     
     # Configuration Substitution
@@ -180,6 +189,7 @@ def main():
     neon.set_substitution('NEON_ARG_PARTIAL_LEN', partial_len)
     neon.set_substitution('NEON_ARG_N_THREADS', args.threads) 
     neon.set_substitution('NEON_ARG_THRESHOLD', args.threshold)
+    neon.set_substitution('NEON_ARG_N_PARTIES', n_parties)
     neon.set_substitution('NEON_ARG_ENABLE_K_ANON', args.k_anon)
     neon.set_substitution('NEON_ARG_ENABLE_PARTIAL_ORDERS', args.partial_orders)
     neon.set_substitution('NEON_ARG_DELTA', args.delta)  # already in ms
@@ -200,8 +210,8 @@ def main():
         neon.set_substitution('NEON_ARG_DP_K', 0)
 
     # Set Inputs
-    neon.set_input(0, input_p0)
-    neon.set_input(1, input_p1)
+    for p in range(n_parties):
+        neon.set_input(p, inputs[p])
     
     # --- 4. Execute ---
     print("--- Executing SMPC (compile + run) ---")

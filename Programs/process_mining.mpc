@@ -8,6 +8,7 @@ N_PER_PARTY = 8
 PARTIAL_LEN = 3
 N_THREADS = 16
 THRESHOLD = 1
+N_PARTIES = 2
 ENABLE_K_ANON = 0
 ENABLE_PARTIAL_ORDERS = 0
 ENABLE_DP = 0
@@ -84,10 +85,15 @@ try:
 except ValueError:
     pass
 
-print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s, PO=%s, DP=%s, Delta=%s, DP_K=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON, ENABLE_PARTIAL_ORDERS, ENABLE_DP, DELTA, DP_K)
+try:
+    N_PARTIES = int('NEON_ARG_N_PARTIES')
+except ValueError:
+    pass
 
-TOTAL_N = N_PER_PARTY * 2
-FULL_LEN = PARTIAL_LEN * 2
+print_ln("Final Config: N=%s, Partial_Len=%s, Threads=%s, Threshold=%s, K-Anon=%s, PO=%s, DP=%s, Delta=%s, DP_K=%s, Parties=%s", N_PER_PARTY, PARTIAL_LEN, N_THREADS, THRESHOLD, ENABLE_K_ANON, ENABLE_PARTIAL_ORDERS, ENABLE_DP, DELTA, DP_K, N_PARTIES)
+
+TOTAL_N = N_PER_PARTY * N_PARTIES
+FULL_LEN = PARTIAL_LEN * N_PARTIES
 COLS_PER_EVENT = 2
 ROW_WIDTH = 2 + (PARTIAL_LEN * COLS_PER_EVENT)
 ACT_BITS = 17  # Bits reserved for activity ID in composite sort key (supports up to 131072 activities)
@@ -108,20 +114,14 @@ def main():
     #neon_timer: Reading Inputs NEON_TIMER_INPUTS
     start_timer(NEON_TIMER_INPUTS)
     
-    for i in range(N_PER_PARTY):
-        data[i][0] = sint64.get_input_from(0)
-        data[i][1] = sint64(0)
-        for j in range(PARTIAL_LEN):
-            data[i][2 + j*2] = sint64.get_input_from(0)
-            data[i][2 + j*2 + 1] = sint64.get_input_from(0)
-
-    for i in range(N_PER_PARTY):
-        row = N_PER_PARTY + i
-        data[row][0] = sint64.get_input_from(1)
-        data[row][1] = sint64(1) 
-        for j in range(PARTIAL_LEN):
-            data[row][2 + j*2] = sint64.get_input_from(1)
-            data[row][2 + j*2 + 1] = sint64.get_input_from(1)
+    for p in range(N_PARTIES):
+        for i in range(N_PER_PARTY):
+            row = p * N_PER_PARTY + i
+            data[row][0] = sint64.get_input_from(p)
+            data[row][1] = sint64(p)
+            for j in range(PARTIAL_LEN):
+                data[row][2 + j*2] = sint64.get_input_from(p)
+                data[row][2 + j*2 + 1] = sint64.get_input_from(p)
             
     stop_timer(NEON_TIMER_INPUTS)
 
@@ -130,113 +130,152 @@ def main():
     #neon_timer: PSI Bitonic Merge NEON_TIMER_PSI
     start_timer(NEON_TIMER_PSI)
     
-    # --- Bitonic Merge Optimization ---
-    # We assume inputs are pre-sorted: P0 Ascending, P1 Descending.
-    # This forms a Bitonic Sequence (Ascending -> Descending).
-    # We pad to the next Power of 2 with MAX Values to perform oblivious Bitonic Merge.
-    
-    # 1. Calculate Power of 2 Size
-    NEXT_POW2 = 1
-    while NEXT_POW2 < TOTAL_N:
-        NEXT_POW2 *= 2
-    
-    # Optimization: If TOTAL_N is already Pow2, we might not need padding, 
-    # but the logic is uniform with padding.
-    
-    # 2. Create Padded Matrix
-    # We use a large MAX value for padding so these elements end up at the bottom after sort.
-    # 2^60 is safe for standard timestamps/IDs (sint64 range).
-    # PAD_VAL = sint64(2**60)  <-- FIXED: Don't create register here
-    
-    padded_data = sint64.Matrix(NEXT_POW2, ROW_WIDTH)
+    # --- Bitonic Merge ---
+    # For N=2: direct bitonic merge (P0 ascending + P1 descending = bitonic sequence).
+    # For N>=3: iterative merge — merge P0+P1, then result+P2, then result+P3, etc.
+    # Each step reuses the same bitonic merge network. Zero regression for N=2.
 
-    # 3. Fill Padded Matrix
-    # We split into 3 loops to avoid complex branching inside threads.
-    
-    # A) Copy Party 0 (Ascending) -> Indices 0 to N_PER_PARTY-1
-    @for_range_opt_multithread(N_THREADS, N_PER_PARTY)
-    def _(i):
-        for c in range(ROW_WIDTH):
-            padded_data[i][c] = data[i][c]
+    if N_PARTIES == 2:
+        # === 2-PARTY FAST PATH (unchanged) ===
+        # Pre-sorted: P0 Ascending, P1 Descending → Bitonic Sequence.
+        NEXT_POW2_PSI = 1
+        while NEXT_POW2_PSI < TOTAL_N:
+            NEXT_POW2_PSI *= 2
 
-    # B) Fill Padding (Middle) -> Indices N_PER_PARTY to NEXT_POW2 - N_PER_PARTY - 1
-    pad_start = N_PER_PARTY
-    pad_end = NEXT_POW2 - N_PER_PARTY
-    if pad_end > pad_start:
-        @for_range_opt_multithread(N_THREADS, pad_end - pad_start)
-        def _(k):
-            idx = pad_start + k
-            # Key = MAX, others = 0
-            # FIXED: Instantiate constant inside thread
-            padded_data[idx][0] = sint64(2**60)
-            for c in range(1, ROW_WIDTH):
-                padded_data[idx][c] = sint64(0)
+        padded_data = sint64.Matrix(NEXT_POW2_PSI, ROW_WIDTH)
 
-    # C) Copy Party 1 (Descending) -> Indices NEXT_POW2 - N_PER_PARTY to NEXT_POW2 - 1
-    # We map data[N_PER_PARTY...2N-1] to the end of padded_data
-    @for_range_opt_multithread(N_THREADS, N_PER_PARTY)
-    def _(k):
-        target_idx = pad_end + k
-        src_idx = N_PER_PARTY + k
-        for c in range(ROW_WIDTH):
-            padded_data[target_idx][c] = data[src_idx][c]
-
-    # 4. Bitonic Merge Network
-    # Since the sequence is now Bitonic (Asc -> Pad(Max) -> Desc), 
-    # we only need the "Merge" phase of Bitonic Sort.
-    
-    step = NEXT_POW2 // 2
-    
-    # We use a standard Python loop for the steps (log N iterations),
-    # but we parallelize the comparisons within each step (N/2 ops).
-    while step > 0:
-        n_ops = NEXT_POW2 // 2
-        
-        # Pass 'step' as a constant to the thread
-        step_val = step
-
-        @for_range_opt_multithread(N_THREADS, n_ops)
+        # A) Copy Party 0 (Ascending) → Indices 0 to N_PER_PARTY-1
+        @for_range_opt_multithread(N_THREADS, N_PER_PARTY)
         def _(i):
-            # Dynamic Index Calculation
-            # k = index within the 'step' block
-            # j = start of the '2*step' block
-            k = i % step_val
-            j = (i // step_val) * (2 * step_val)
-            
-            idx1 = j + k
-            idx2 = idx1 + step_val
-            
-            # --- Load Key (Index 0) ---
-            key_a = padded_data[idx1][0]
-            key_b = padded_data[idx2][0]
-            
-            # --- Compare ---
-            swap = (key_a > key_b)
-            
-            # --- Swap All Columns ---
             for c in range(ROW_WIDTH):
-                val_a = padded_data[idx1][c]
-                val_b = padded_data[idx2][c]
-                
-                # Oblivious Swap (MUX)
-                # If swap=1: new_a = val_b, new_b = val_a
-                # If swap=0: new_a = val_a, new_b = val_b
-                
-                # Using if_else for clarity and safety with MP-SPDZ types
-                new_a = swap.if_else(val_b, val_a)
-                new_b = swap.if_else(val_a, val_b)
-                
-                padded_data[idx1][c] = new_a
-                padded_data[idx2][c] = new_b
-                
-        step //= 2
+                padded_data[i][c] = data[i][c]
 
-    # 5. Copy Result Back (Truncate Padding)
-    # The first TOTAL_N elements are the sorted result.
-    @for_range_opt_multithread(N_THREADS, TOTAL_N)
-    def _(i):
-        for c in range(ROW_WIDTH):
-            data[i][c] = padded_data[i][c]
+        # B) Fill Padding (Middle)
+        pad_start = N_PER_PARTY
+        pad_end = NEXT_POW2_PSI - N_PER_PARTY
+        if pad_end > pad_start:
+            @for_range_opt_multithread(N_THREADS, pad_end - pad_start)
+            def _(k):
+                idx = pad_start + k
+                padded_data[idx][0] = sint64(2**60)
+                for c in range(1, ROW_WIDTH):
+                    padded_data[idx][c] = sint64(0)
+
+        # C) Copy Party 1 (Descending) → End of padded_data
+        @for_range_opt_multithread(N_THREADS, N_PER_PARTY)
+        def _(k):
+            target_idx = pad_end + k
+            src_idx = N_PER_PARTY + k
+            for c in range(ROW_WIDTH):
+                padded_data[target_idx][c] = data[src_idx][c]
+
+        # Bitonic Merge Network
+        step = NEXT_POW2_PSI // 2
+        while step > 0:
+            n_ops = NEXT_POW2_PSI // 2
+            step_val = step
+            @for_range_opt_multithread(N_THREADS, n_ops)
+            def _(i):
+                k = i % step_val
+                j = (i // step_val) * (2 * step_val)
+                idx1 = j + k
+                idx2 = idx1 + step_val
+                key_a = padded_data[idx1][0]
+                key_b = padded_data[idx2][0]
+                swap = (key_a > key_b)
+                for c in range(ROW_WIDTH):
+                    val_a = padded_data[idx1][c]
+                    val_b = padded_data[idx2][c]
+                    new_a = swap.if_else(val_b, val_a)
+                    new_b = swap.if_else(val_a, val_b)
+                    padded_data[idx1][c] = new_a
+                    padded_data[idx2][c] = new_b
+            step //= 2
+
+        # Copy Result Back
+        @for_range_opt_multithread(N_THREADS, TOTAL_N)
+        def _(i):
+            for c in range(ROW_WIDTH):
+                data[i][c] = padded_data[i][c]
+
+    else:
+        # === N-PARTY ITERATIVE BITONIC MERGE ===
+        # After input: data[0..N_PER_PARTY-1] = P0 (ascending)
+        #              data[p*N_PER_PARTY..(p+1)*N_PER_PARTY-1] = Pp (descending for p>=1)
+        # We iteratively merge: result_so_far (ascending) with next party (descending).
+
+        merged_size = N_PER_PARTY  # starts with P0 already in data[0..N_PER_PARTY-1]
+
+        for p in range(1, N_PARTIES):  # compile-time loop over parties
+            new_party_start = p * N_PER_PARTY
+            total_size = merged_size + N_PER_PARTY
+
+            # Pad to next power of 2
+            POW2 = 1
+            while POW2 < total_size:
+                POW2 *= 2
+
+            padded_iter = sint64.Matrix(POW2, ROW_WIDTH)
+
+            # A) Copy merged result (ascending) → indices 0..merged_size-1
+            @for_range_opt_multithread(N_THREADS, merged_size)
+            def _(i):
+                for c in range(ROW_WIDTH):
+                    padded_iter[i][c] = data[i][c]
+
+            # B) Fill padding → indices merged_size..POW2-N_PER_PARTY-1
+            iter_pad_start = merged_size
+            iter_pad_end = POW2 - N_PER_PARTY
+            if iter_pad_end > iter_pad_start:
+                pad_count = iter_pad_end - iter_pad_start
+                @for_range_opt_multithread(N_THREADS, pad_count)
+                def _(k):
+                    idx = iter_pad_start + k
+                    padded_iter[idx][0] = sint64(2**60)
+                    for c in range(1, ROW_WIDTH):
+                        padded_iter[idx][c] = sint64(0)
+
+            # C) Copy next party (descending) → indices POW2-N_PER_PARTY..POW2-1
+            nps = new_party_start  # capture for closure
+            ipe = iter_pad_end     # capture for closure
+            @for_range_opt_multithread(N_THREADS, N_PER_PARTY)
+            def _(k):
+                target_idx = ipe + k
+                src_idx = nps + k
+                for c in range(ROW_WIDTH):
+                    padded_iter[target_idx][c] = data[src_idx][c]
+
+            # Bitonic Merge Network (identical to 2-party)
+            step = POW2 // 2
+            while step > 0:
+                n_ops = POW2 // 2
+                step_val = step
+                @for_range_opt_multithread(N_THREADS, n_ops)
+                def _(i):
+                    k = i % step_val
+                    j = (i // step_val) * (2 * step_val)
+                    idx1 = j + k
+                    idx2 = idx1 + step_val
+                    key_a = padded_iter[idx1][0]
+                    key_b = padded_iter[idx2][0]
+                    swap = (key_a > key_b)
+                    for c in range(ROW_WIDTH):
+                        val_a = padded_iter[idx1][c]
+                        val_b = padded_iter[idx2][c]
+                        new_a = swap.if_else(val_b, val_a)
+                        new_b = swap.if_else(val_a, val_b)
+                        padded_iter[idx1][c] = new_a
+                        padded_iter[idx2][c] = new_b
+                step //= 2
+
+            # Copy sorted result back to data[0..total_size-1]
+            ts = total_size  # capture for closure
+            @for_range_opt_multithread(N_THREADS, ts)
+            def _(i):
+                for c in range(ROW_WIDTH):
+                    data[i][c] = padded_iter[i][c]
+
+            merged_size = total_size
 
     stop_timer(NEON_TIMER_PSI)
 
@@ -251,83 +290,20 @@ def main():
     merged_data = sint64.Matrix(TOTAL_N, MERGED_COLS)
     merged_data.assign_all(0)
 
-    MAX_TIME = 2**60 
-    
-    NEXT_POW2 = 1
-    while NEXT_POW2 < FULL_LEN:
-        NEXT_POW2 *= 2
-    
-    @for_range_opt_multithread(N_THREADS, TOTAL_N - 1)
-    def _(i):
-        # We need to verify that we are not matching on Padding (MAX_TIME)
-        # Note: MPC Padding is 2**60. Input generic padding is now also 2**60.
-        PAD_VAL = sint64(2**60) 
-        
-        ids_match = (data[i][0] == data[i+1][0])
-        diff_parties = (data[i][1] != data[i+1][1])
-        is_valid_id = (data[i][0] != PAD_VAL)
-        
-        is_match = ids_match & diff_parties & is_valid_id
-        
-        merged_data[i][1] = is_match ^ 1
-        
-        # Sort keys and satellite arrays for the pruned bitonic merge.
-        # When ENABLE_PARTIAL_ORDERS: composite key (timestamp << ACT_BITS) | activity_id
-        #   sorts by timestamp first, then activity_id within ties → deterministic.
-        # When disabled: raw timestamps as sort keys (original behavior).
-        sort_keys = [sint64(MAX_TIME) for _ in range(NEXT_POW2)]
-        sort_vals_ts = [sint64(MAX_TIME) for _ in range(NEXT_POW2)]
-        sort_vals_act = [sint64(0) for _ in range(NEXT_POW2)]
+    MAX_TIME = 2**60
 
-        for k in range(PARTIAL_LEN):
-            ts = data[i][2 + k*2]
-            act = data[i][2 + k*2 + 1]
-            if ENABLE_PARTIAL_ORDERS:
-                # Guard: (PAD_TIME << ACT_BITS) overflows sint64, so only
-                # compute composite key for real events; padding keeps MAX_TIME.
-                is_real = (ts != sint64(MAX_TIME))
-                composite = (ts << ACT_BITS) | act
-                sort_keys[k] = is_real.if_else(composite, sint64(MAX_TIME))
-            else:
-                sort_keys[k] = ts
-            sort_vals_ts[k] = ts
-            sort_vals_act[k] = act
-
-        for k in range(PARTIAL_LEN):
-            idx = NEXT_POW2 - 1 - k
-            ts = data[i+1][2 + k*2]
-            act = data[i+1][2 + k*2 + 1]
-            if ENABLE_PARTIAL_ORDERS:
-                is_real = (ts != sint64(MAX_TIME))
-                composite = (ts << ACT_BITS) | act
-                sort_keys[idx] = is_real.if_else(composite, sint64(MAX_TIME))
-            else:
-                sort_keys[idx] = ts
-            sort_vals_ts[idx] = ts
-            sort_vals_act[idx] = act
-
-        # Track padding state (True = Known MAX_TIME)
-        is_padding = [False] * NEXT_POW2
-        
-        # Initialize Padding State based on layout
-        # 0..PARTIAL_LEN-1 -> Data (False)
-        # PARTIAL_LEN..NEXT_POW2-PARTIAL_LEN-1 -> Padding (True)
-        # NEXT_POW2-PARTIAL_LEN..NEXT_POW2-1 -> Data (False)
-        for k in range(PARTIAL_LEN, NEXT_POW2 - PARTIAL_LEN):
-             is_padding[k] = True
-
-        step = NEXT_POW2 // 2
+    # --- Helper: pruned bitonic merge on compile-time Python lists ---
+    # Used by both N=2 and N>=3 paths for the inner event merge.
+    # Merges ascending (positions 0..merged_count-1) with descending (positions POW2-new_count..POW2-1).
+    # Padding fills the middle. Returns (keys, ts, act, padding) lists after merge.
+    def pruned_bitonic_merge(sort_keys, sort_vals_ts, sort_vals_act, is_padding, POW2):
+        step = POW2 // 2
         while step > 0:
-            # Generate pairs for this step
             pairs = []
-            for j in range(0, NEXT_POW2, step * 2):
-                for k in range(step):
-                    pairs.append((j + k, j + k + step))
+            for j in range(0, POW2, step * 2):
+                for kk in range(step):
+                    pairs.append((j + kk, j + kk + step))
 
-            # Pruned Batch Processing
-            # We must process the lists manually to distinguish "Compare" vs "Static" vs "NoOp"
-            
-            # Temporary lists for "Data vs Data" batching (for vectorization efficiency)
             batch_pairs = []
             batch_keys_a = []
             batch_keys_b = []
@@ -339,30 +315,20 @@ def main():
             for idx1, idx2 in pairs:
                 p1 = is_padding[idx1]
                 p2 = is_padding[idx2]
-
                 if p1 and p2:
-                    # Pad vs Pad -> Both MAX. No Swap needed. State Unchanged.
                     pass
-
                 elif not p1 and p2:
-                    # Data vs Pad (MAX). Data < MAX always. No swap needed.
                     pass
-
                 elif p1 and not p2:
-                    # Pad (MAX) vs Data. MAX > Data always. Swap.
                     sort_keys[idx1] = sort_keys[idx2]
                     sort_vals_ts[idx1] = sort_vals_ts[idx2]
                     sort_vals_act[idx1] = sort_vals_act[idx2]
-
                     sort_keys[idx2] = sint64(MAX_TIME)
                     sort_vals_ts[idx2] = sint64(MAX_TIME)
                     sort_vals_act[idx2] = sint64(0)
-
                     is_padding[idx1] = False
                     is_padding[idx2] = True
-
                 else:
-                    # Data vs Data -> Must Compare Obliviously
                     batch_pairs.append((idx1, idx2))
                     batch_keys_a.append(sort_keys[idx1])
                     batch_keys_b.append(sort_keys[idx2])
@@ -371,24 +337,14 @@ def main():
                     batch_act_a.append(sort_vals_act[idx1])
                     batch_act_b.append(sort_vals_act[idx2])
 
-            # Process the accumulated "Data vs Data" batch
             if batch_pairs:
-                # Batch Compare (on composite keys)
                 swaps = [(a > b) for a, b in zip(batch_keys_a, batch_keys_b)]
-
-                # Batch Mux — keys
                 new_keys_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_keys_a, batch_keys_b)]
                 new_keys_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_keys_a, batch_keys_b)]
-
-                # Batch Mux — timestamps
                 new_ts_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_ts_a, batch_ts_b)]
                 new_ts_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_ts_a, batch_ts_b)]
-
-                # Batch Mux — activity IDs
                 new_act_a = [s.if_else(b, a) for s, a, b in zip(swaps, batch_act_a, batch_act_b)]
                 new_act_b = [s.if_else(a, b) for s, a, b in zip(swaps, batch_act_a, batch_act_b)]
-
-                # Batch Write
                 for idx, (idx1, idx2) in enumerate(batch_pairs):
                     sort_keys[idx1] = new_keys_a[idx]
                     sort_keys[idx2] = new_keys_b[idx]
@@ -396,39 +352,240 @@ def main():
                     sort_vals_ts[idx2] = new_ts_b[idx]
                     sort_vals_act[idx1] = new_act_a[idx]
                     sort_vals_act[idx2] = new_act_b[idx]
-            
-            step //= 2
 
-        # Extract activities (packed with conc_bit when PO enabled)
+            step //= 2
+        return sort_keys, sort_vals_ts, sort_vals_act, is_padding
+
+    # --- Helper: extract sorted activities into merged_data ---
+    def extract_activities(sort_vals_ts, sort_vals_act, target_row, is_match_mask):
+        # is_match_mask: sint64 with all 64 bits = match_bit (N>=3),
+        #                or sbit (N=2, uses .if_else which works correctly for sbit).
         for k in range(FULL_LEN):
             ts = sort_vals_ts[k]
             act = sort_vals_act[k]
-
             is_pad = (ts == sint64(MAX_TIME))
             final_act = is_pad.if_else(sint64(0), act)
-
             if ENABLE_PARTIAL_ORDERS:
                 if k == 0:
-                    # First position is never concurrent
-                    merged_data[i][2 + k] = is_match.if_else(final_act, sint64(0))
+                    if N_PARTIES == 2:
+                        merged_data[target_row][2 + k] = is_match_mask.if_else(final_act, sint64(0))
+                    else:
+                        merged_data[target_row][2 + k] = final_act & is_match_mask
                 else:
                     prev_ts = sort_vals_ts[k - 1]
                     if DELTA == 0:
-                        # Exact equality: EQZ (XOR-tree) — cheaper than LTZ
                         is_close = (ts == prev_ts)
                     else:
-                        # Sliding window: LTZ via subtraction (parallel prefix adder)
                         diff = ts - prev_ts
                         is_close = (diff < sint64(DELTA))
                     both_valid = (ts != sint64(MAX_TIME)) & (prev_ts != sint64(MAX_TIME))
                     is_conc = is_close & both_valid
-                    # Pack: activity_id | (conc_bit << 32)
                     packed = final_act | (is_conc << 32)
-                    merged_data[i][2 + k] = is_match.if_else(packed, sint64(0))
+                    if N_PARTIES == 2:
+                        merged_data[target_row][2 + k] = is_match_mask.if_else(packed, sint64(0))
+                    else:
+                        merged_data[target_row][2 + k] = packed & is_match_mask
             else:
-                merged_data[i][2 + k] = is_match.if_else(final_act, sint64(0))
-    # Last row has no adjacent pair to match against — mark as invalid.
-    merged_data[TOTAL_N - 1][1] = sint64(1)
+                if N_PARTIES == 2:
+                    merged_data[target_row][2 + k] = is_match_mask.if_else(final_act, sint64(0))
+                else:
+                    merged_data[target_row][2 + k] = final_act & is_match_mask
+
+    if N_PARTIES == 2:
+        # === 2-PARTY RECONSTRUCTION (unchanged) ===
+        NEXT_POW2 = 1
+        while NEXT_POW2 < FULL_LEN:
+            NEXT_POW2 *= 2
+
+        @for_range_opt_multithread(N_THREADS, TOTAL_N - 1)
+        def _(i):
+            PAD_VAL = sint64(2**60)
+            ids_match = (data[i][0] == data[i+1][0])
+            diff_parties = (data[i][1] != data[i+1][1])
+            is_valid_id = (data[i][0] != PAD_VAL)
+            is_match = ids_match & diff_parties & is_valid_id
+            merged_data[i][1] = is_match ^ 1
+
+            # Sort buffers for pruned bitonic merge
+            sort_keys = [sint64(MAX_TIME) for _ in range(NEXT_POW2)]
+            sort_vals_ts = [sint64(MAX_TIME) for _ in range(NEXT_POW2)]
+            sort_vals_act = [sint64(0) for _ in range(NEXT_POW2)]
+
+            # Party 0's events (ascending) at indices 0..PARTIAL_LEN-1
+            for k in range(PARTIAL_LEN):
+                ts = data[i][2 + k*2]
+                act = data[i][2 + k*2 + 1]
+                if ENABLE_PARTIAL_ORDERS:
+                    is_real = (ts != sint64(MAX_TIME))
+                    composite = (ts << ACT_BITS) | act
+                    sort_keys[k] = is_real.if_else(composite, sint64(MAX_TIME))
+                else:
+                    sort_keys[k] = ts
+                sort_vals_ts[k] = ts
+                sort_vals_act[k] = act
+
+            # Padding state: [data | padding | data]
+            is_padding = [False] * NEXT_POW2
+            for k in range(PARTIAL_LEN, NEXT_POW2 - PARTIAL_LEN):
+                is_padding[k] = True
+
+            # Party 1's events (reversed = descending) at indices NEXT_POW2-PARTIAL_LEN..NEXT_POW2-1
+            for k in range(PARTIAL_LEN):
+                idx = NEXT_POW2 - 1 - k
+                ts = data[i+1][2 + k*2]
+                act = data[i+1][2 + k*2 + 1]
+                if ENABLE_PARTIAL_ORDERS:
+                    is_real = (ts != sint64(MAX_TIME))
+                    composite = (ts << ACT_BITS) | act
+                    sort_keys[idx] = is_real.if_else(composite, sint64(MAX_TIME))
+                else:
+                    sort_keys[idx] = ts
+                sort_vals_ts[idx] = ts
+                sort_vals_act[idx] = act
+
+            # Pruned bitonic merge
+            pruned_bitonic_merge(sort_keys, sort_vals_ts, sort_vals_act, is_padding, NEXT_POW2)
+
+            # Extract activities
+            extract_activities(sort_vals_ts, sort_vals_act, i, is_match)
+
+        # Last row is invalid
+        merged_data[TOTAL_N - 1][1] = sint64(1)
+
+    else:
+        # === N-PARTY RECONSTRUCTION (N >= 3) ===
+        # Pass 1: Sequential scan to detect N-length groups (run_len == N_PARTIES at boundary)
+        # Pass 2: Parallel merge of events for valid groups with distinct party IDs
+
+        # --- Pass 1: Sequential group boundary detection ---
+        is_candidate_end = Array(TOTAL_N, sint64)
+        is_candidate_end.assign_all(0)
+        current_run_len = MemValue(sint64(1))
+
+        @for_range_opt(TOTAL_N - 1)
+        def _(i):
+            PAD_VAL = sint64(2**60)
+            same_id = (data[i][0] == data[i+1][0])
+            is_valid = (data[i][0] != PAD_VAL)
+            continues = same_id & is_valid
+
+            rl = current_run_len.read()
+            group_ended = continues ^ 1
+            is_complete = (rl == sint64(N_PARTIES))
+
+            is_candidate_end[i] = group_ended & is_complete & is_valid
+            current_run_len.write(continues.if_else(rl + 1, sint64(1)))
+
+        # Handle last position
+        rl_final = current_run_len.read()
+        is_complete_final = (rl_final == sint64(N_PARTIES))
+        is_valid_final = (data[TOTAL_N - 1][0] != sint64(2**60))
+        is_candidate_end[TOTAL_N - 1] = is_complete_final & is_valid_final
+
+        # Mark first N_PARTIES - 1 rows as invalid (can't be group ends)
+        for j in range(N_PARTIES - 1):
+            merged_data[j][1] = sint64(1)
+
+        # --- Pass 2: Parallel validation + event merge ---
+        @for_range_opt_multithread(N_THREADS, TOTAL_N - (N_PARTIES - 1))
+        def _(i_offset):
+            i = i_offset + (N_PARTIES - 1)
+            is_end = is_candidate_end[i]
+
+            # Pairwise party ID distinctness check (C(N,2) equality checks)
+            all_distinct = sint64(1)
+            for a in range(N_PARTIES):
+                for b in range(a + 1, N_PARTIES):
+                    row_a = i - (N_PARTIES - 1) + a
+                    row_b = i - (N_PARTIES - 1) + b
+                    all_distinct = all_distinct & (data[row_a][1] != data[row_b][1])
+
+            is_match = is_end & all_distinct  # sint64, value 0 or 1
+            merged_data[i][1] = sint64(1) - is_match
+            # Create 64-bit mask for cheap bitwise AND masking in extract_activities
+            # Negate: 0 → 0x0, 1 → 0xFFFF...FFFF (all-ones in two's complement)
+            is_match_mask = sint64(0) - is_match
+
+            # --- Iterative bitonic merge of N_PARTIES * PARTIAL_LEN events ---
+            # Each party's events are pre-sorted ascending by timestamp.
+            # We merge iteratively: P0 (ascending) + P1 (reversed=descending) → merge →
+            #   result (ascending) + P2 (reversed=descending) → merge → ...
+
+            group_start = i - (N_PARTIES - 1)
+
+            # Initialize with party 0's events
+            INIT_POW2 = 1
+            while INIT_POW2 < PARTIAL_LEN:
+                INIT_POW2 *= 2
+
+            cur_keys = [sint64(MAX_TIME)] * INIT_POW2
+            cur_ts = [sint64(MAX_TIME)] * INIT_POW2
+            cur_act = [sint64(0)] * INIT_POW2
+            cur_pad = [True] * INIT_POW2
+
+            for k in range(PARTIAL_LEN):
+                ts = data[group_start][2 + k*2]
+                act = data[group_start][2 + k*2 + 1]
+                if ENABLE_PARTIAL_ORDERS:
+                    is_real = (ts != sint64(MAX_TIME))
+                    composite = (ts << ACT_BITS) | act
+                    cur_keys[k] = is_real.if_else(composite, sint64(MAX_TIME))
+                else:
+                    cur_keys[k] = ts
+                cur_ts[k] = ts
+                cur_act[k] = act
+                cur_pad[k] = False
+
+            merged_count = PARTIAL_LEN
+
+            # Iteratively merge each subsequent party's events
+            for p in range(1, N_PARTIES):  # compile-time loop
+                total_count = merged_count + PARTIAL_LEN
+                POW2 = 1
+                while POW2 < total_count:
+                    POW2 *= 2
+
+                # Create merge buffer: [merged ascending | padding | new party reversed]
+                m_keys = [sint64(MAX_TIME)] * POW2
+                m_ts = [sint64(MAX_TIME)] * POW2
+                m_act = [sint64(0)] * POW2
+                m_pad = [True] * POW2
+
+                # Copy merged result (ascending) to start
+                for k in range(merged_count):
+                    m_keys[k] = cur_keys[k]
+                    m_ts[k] = cur_ts[k]
+                    m_act[k] = cur_act[k]
+                    m_pad[k] = cur_pad[k]
+
+                # Copy new party's events (REVERSED = descending) to end
+                row = group_start + p
+                for k in range(PARTIAL_LEN):
+                    idx = POW2 - 1 - k
+                    ts = data[row][2 + k*2]
+                    act = data[row][2 + k*2 + 1]
+                    if ENABLE_PARTIAL_ORDERS:
+                        is_real = (ts != sint64(MAX_TIME))
+                        composite = (ts << ACT_BITS) | act
+                        m_keys[idx] = is_real.if_else(composite, sint64(MAX_TIME))
+                    else:
+                        m_keys[idx] = ts
+                    m_ts[idx] = ts
+                    m_act[idx] = act
+                    m_pad[idx] = False
+
+                # Pruned bitonic merge
+                pruned_bitonic_merge(m_keys, m_ts, m_act, m_pad, POW2)
+
+                # Carry forward the sorted result for next iteration
+                cur_keys = m_keys
+                cur_ts = m_ts
+                cur_act = m_act
+                cur_pad = m_pad
+                merged_count = total_count
+
+            # Extract sorted activities into merged_data[i]
+            extract_activities(cur_ts, cur_act, i, is_match_mask)
 
     stop_timer(NEON_TIMER_RECON)
 

@@ -56,6 +56,8 @@ def browse_files():
 def run_process_mining():
     data = request.json
     
+    # Support both legacy (log_a/log_b) and new (logs list) API
+    logs = data.get('logs', None)
     log_a = data.get('log_a')
     log_b = data.get('log_b')
     threshold = data.get('threshold', 1)
@@ -73,14 +75,17 @@ def run_process_mining():
     epsilon = data.get('epsilon', 1.0)
     dp_delta = data.get('dp_delta', 0.01)
 
-    if not log_a or not log_b:
-        return jsonify({"error": "Both Log A and Log B are required."}), 400
+    if logs and len(logs) >= 2:
+        log_paths = logs
+    elif log_a and log_b:
+        log_paths = [log_a, log_b]
+    else:
+        return jsonify({"error": "At least 2 log files required. Use 'logs' list or 'log_a'/'log_b'."}), 400
 
     # Command construction
     cmd = [
-        "python3", "-u", "examples/run_process_mining.py", # -u for unbuffered output
-        "--log-a", log_a,
-        "--log-b", log_b,
+        "python3", "-u", "examples/run_process_mining.py",
+        "--logs", *log_paths,
         "--threshold", str(threshold),
         "--threads", str(threads),
         "--k-anon", str(k_anon),

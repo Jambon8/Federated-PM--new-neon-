@@ -10,10 +10,11 @@ BASE_DIR = os.getcwd()
 if not os.path.exists("Player-Data"):
     os.makedirs("Player-Data")
 
-OUTPUT_A = os.path.join(BASE_DIR, "Player-Data/Input-P0-0")
-OUTPUT_B = os.path.join(BASE_DIR, "Player-Data/Input-P1-0")
-OUTPUT_A_BIN = os.path.join(BASE_DIR, "Player-Data/Input-Binary-P0-0")
-OUTPUT_B_BIN = os.path.join(BASE_DIR, "Player-Data/Input-Binary-P1-0")
+def party_file(p):
+    return os.path.join(BASE_DIR, f"Player-Data/Input-P{p}-0")
+
+def party_file_bin(p):
+    return os.path.join(BASE_DIR, f"Player-Data/Input-Binary-P{p}-0")
 
 PAD_TIME = 2**60
 PAD_ACT = 0
@@ -99,36 +100,37 @@ def parse_ocel(filepath, flatten_type="Container", use_handovers=False, timestam
 
     return cases
 
-def encode_and_save(cases_a, cases_b):
-    cases_a.sort(key=lambda c: c['id'])
-    cases_b.sort(key=lambda c: c['id'], reverse=True)
+def encode_and_save(cases_list):
+    """Aligns dictionaries and writes MPC input files for N parties."""
+    n_parties = len(cases_list)
 
-    all_case_ids = set(c['id'] for c in cases_a + cases_b)
-    all_activities = set(e[1] for c in cases_a + cases_b for e in c['events'])
-    
+    # P0: ascending. P1..Pk-1: descending (for iterative bitonic merge).
+    cases_list[0].sort(key=lambda c: c['id'])
+    for p in range(1, n_parties):
+        cases_list[p].sort(key=lambda c: c['id'], reverse=True)
+
+    all_cases = [c for party in cases_list for c in party]
+    all_case_ids = set(c['id'] for c in all_cases)
+    all_activities = set(e[1] for c in all_cases for e in c['events'])
+
     case_id_map = {cid: i+1 for i, cid in enumerate(sorted(all_case_ids))}
     act_map = {act: i+1 for i, act in enumerate(sorted(all_activities))}
 
     id_to_act = {v: k for k, v in act_map.items()}
     with open("Player-Data/activity_map.json", "w") as f:
         json.dump(id_to_act, f)
-        
+
     print("\n--- ACTIVITY DECODER RING ---")
     sorted_acts = sorted(act_map.items(), key=lambda item: item[1])
     for name, id in sorted_acts:
         print(f"ID {id}: '{name}'")
     print("-----------------------------\n")
 
-    max_len_a = max(len(c['events']) for c in cases_a) if cases_a else 0
-    max_len_b = max(len(c['events']) for c in cases_b) if cases_b else 0
-    max_len = max(max_len_a, max_len_b)
-    
-    n_a = len(cases_a)
-    n_b = len(cases_b)
-    n_max = max(n_a, n_b)
-    
-    print(f"Configuration for MPC: N_PER_PARTY={n_max}, PARTIAL_LEN={max_len}")
-    
+    max_len = max((max((len(c['events']) for c in party), default=0) for party in cases_list), default=0)
+    n_max = max(len(party) for party in cases_list)
+
+    print(f"Configuration for MPC: N_PER_PARTY={n_max}, PARTIAL_LEN={max_len}, N_PARTIES={n_parties}")
+
     def write_party_file(filename, filename_bin, cases, target_n, target_len, pad_at_start=False):
         with open(filename, 'w') as f:
             all_rows = []
@@ -141,49 +143,55 @@ def encode_and_save(cases_a, cases_b):
                     else:
                         row.extend([PAD_TIME, PAD_ACT])
                 all_rows.append(row)
-            
+
             pad_needed = target_n - len(cases)
             padding_row = [PAD_ID] + [PAD_TIME, PAD_ACT] * target_len
-            
             final_rows = [padding_row] * pad_needed + all_rows if pad_at_start else all_rows + [padding_row] * pad_needed
 
             for row in final_rows:
                  f.write(" ".join(map(str, row)) + "\n")
-        
+
         with open(filename_bin, 'wb') as f:
             for row in final_rows:
                 for value in row:
                     f.write(struct.pack('<q', value))
-            
-    write_party_file(OUTPUT_A, OUTPUT_A_BIN, cases_a, n_max, max_len, pad_at_start=False)
-    write_party_file(OUTPUT_B, OUTPUT_B_BIN, cases_b, n_max, max_len, pad_at_start=True)
-    
-    print("Input files (text and binary) generated successfully.")
+
+    for p in range(n_parties):
+        pad_at_start = (p > 0)
+        write_party_file(party_file(p), party_file_bin(p), cases_list[p],
+                         n_max, max_len, pad_at_start=pad_at_start)
+
+    print(f"Input files for {n_parties} parties generated successfully.")
     return n_max, max_len
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("file_a")
-    parser.add_argument("file_b")
+    parser.add_argument("logs", nargs='+', help="Paths to OCEL log files (one per party, minimum 2)")
     parser.add_argument("--use-handovers", action="store_true")
-    # By default, flatten on "Container"
     parser.add_argument("--flatten-type", default="Container")
     parser.add_argument("--timestamp-granularity", choices=['ms', 's', 'm', 'h'], default='ms',
-                        help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). Both parties must use the same value.")
+                        help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). All parties must use the same value.")
     args = parser.parse_args()
-    granularity = GRANULARITY_MS[args.timestamp_granularity]
 
-    log_a = parse_ocel(args.file_a, args.flatten_type, args.use_handovers, timestamp_granularity=granularity)
-    log_b = parse_ocel(args.file_b, args.flatten_type, args.use_handovers, timestamp_granularity=granularity)
-    
-    if not log_a or not log_b:
-        print("Failed to load logs.")
+    if len(args.logs) < 2:
+        print("Error: At least 2 log files required.")
         sys.exit(1)
 
-    n, length = encode_and_save(log_a, log_b)
-    
+    granularity = GRANULARITY_MS[args.timestamp_granularity]
+    cases_list = []
+    for path in args.logs:
+        cases = parse_ocel(path, args.flatten_type, args.use_handovers, timestamp_granularity=granularity)
+        if not cases:
+            print(f"Failed to load log: {path}")
+            sys.exit(1)
+        cases_list.append(cases)
+
+    n, length = encode_and_save(cases_list)
+
+    n_parties = len(cases_list)
     print("\n!!! UPDATE YOUR .mpc FILE WITH THESE VALUES !!!")
     print(f"N_PER_PARTY = {n}")
     print(f"PARTIAL_LEN = {length}")
-    print(f"FULL_LEN = {length * 2}")
+    print(f"N_PARTIES = {n_parties}")
+    print(f"FULL_LEN = {length * n_parties}")
