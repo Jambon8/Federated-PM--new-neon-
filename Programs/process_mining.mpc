@@ -355,8 +355,11 @@ def main():
         for k in range(FULL_LEN):
             ts = sort_vals_ts[k]
             act = sort_vals_act[k]
-            is_pad = (ts == sint64(MAX_TIME))
-            final_act = is_pad.if_else(sint64(0), act)
+            # Padding positions always have act=sint64(0) by construction (sort buffer
+            # init + padding_data compile-time branch in pruned_bitonic_merge explicitly
+            # sets act to 0). Real activities start at ID 1 (preprocessing reserves 0
+            # for padding). So `is_pad.if_else(0, act)` is equivalent to `act`.
+            final_act = act
             if ENABLE_PARTIAL_ORDERS:
                 if k == 0:
                     if N_PARTIES == 2:
@@ -393,9 +396,11 @@ def main():
         def _(i):
             PAD_VAL = sint64(2**60)
             ids_match = (data[i][0] == data[i+1][0])
-            diff_parties = (data[i][1] != data[i+1][1])
             is_valid_id = (data[i][0] != PAD_VAL)
-            is_match = ids_match & diff_parties & is_valid_id
+            # Party distinctness check removed: preprocessing guarantees each party has
+            # at most 1 row per case_id, so adjacent rows with the same case_id must
+            # come from different parties under the semi-honest threat model.
+            is_match = ids_match & is_valid_id
             merged_data[i][1] = is_match ^ 1
 
             # Sort buffers for pruned bitonic merge
@@ -445,66 +450,36 @@ def main():
         merged_data[TOTAL_N - 1][1] = sint64(1)
 
     else:
-        # === N-PARTY RECONSTRUCTION (N >= 3) ===
-        # Pass 1: Sequential scan to detect N-length groups (run_len == N_PARTIES at boundary)
-        # Pass 2: Parallel merge of events for valid groups with distinct party IDs
+        # === N-PARTY SLIDING-WINDOW RECONSTRUCTION (N >= 3) ===
+        # Generalizes the N=2 sliding-window (window size 2) to arbitrary N.
+        # For each position i, check whether the window of N consecutive rows
+        # starting at i has the same case_id (and is not padding).
+        # Under the preprocessing invariant (each party has ≤1 row per case_id),
+        # this uniquely identifies N-way intersection groups: exactly one window
+        # per valid match fires, surrounding windows include a different case_id.
+        # Fully parallel — no sequential MemValue scan.
 
-        # --- Pass 1: Sequential group boundary detection ---
-        is_candidate_end = Array(TOTAL_N, sint64)
-        is_candidate_end.assign_all(0)
-        current_run_len = MemValue(sint64(1))
-
-        @for_range_opt(TOTAL_N - 1)
+        @for_range_opt_multithread(N_THREADS, TOTAL_N - (N_PARTIES - 1))
         def _(i):
             PAD_VAL = sint64(2**60)
-            same_id = (data[i][0] == data[i+1][0])
-            is_valid = (data[i][0] != PAD_VAL)
-            continues = same_id & is_valid
 
-            rl = current_run_len.read()
-            group_ended = continues ^ 1
-            is_complete = (rl == sint64(N_PARTIES))
-
-            is_candidate_end[i] = group_ended & is_complete & is_valid
-            current_run_len.write(continues.if_else(rl + 1, sint64(1)))
-
-        # Handle last position
-        rl_final = current_run_len.read()
-        is_complete_final = (rl_final == sint64(N_PARTIES))
-        is_valid_final = (data[TOTAL_N - 1][0] != sint64(2**60))
-        is_candidate_end[TOTAL_N - 1] = is_complete_final & is_valid_final
-
-        # Mark first N_PARTIES - 1 rows as invalid (can't be group ends)
-        for j in range(N_PARTIES - 1):
-            merged_data[j][1] = sint64(1)
-
-        # --- Pass 2: Parallel validation + event merge ---
-        @for_range_opt_multithread(N_THREADS, TOTAL_N - (N_PARTIES - 1))
-        def _(i_offset):
-            i = i_offset + (N_PARTIES - 1)
-            is_end = is_candidate_end[i]
-
-            # Pairwise party ID distinctness check (C(N,2) equality checks)
-            all_distinct = sint64(1)
-            for a in range(N_PARTIES):
-                for b in range(a + 1, N_PARTIES):
-                    row_a = i - (N_PARTIES - 1) + a
-                    row_b = i - (N_PARTIES - 1) + b
-                    all_distinct = all_distinct & (data[row_a][1] != data[row_b][1])
-
-            is_match = is_end & all_distinct  # sint64, value 0 or 1
-            merged_data[i][1] = is_match ^ sint64(1)  # flip 0↔1 (XOR, 0 AND)
-            # Create 64-bit mask: 0 → 0x0, 1 → 0xFFFF...FFFF
-            is_match_mask = ~is_match + sint64(1)  # NOT + add (189 AND vs 256)
+            # Chain of adjacent equality checks: (r0==r1) & (r1==r2) & ... & (r_{N-2}==r_{N-1})
+            all_same = (data[i][0] == data[i+1][0])
+            for j in range(1, N_PARTIES - 1):
+                all_same = all_same & (data[i+j][0] == data[i+j+1][0])
+            is_valid_id = (data[i][0] != PAD_VAL)
+            is_match = all_same & is_valid_id  # sbit (from comparison chain)
+            # Store validity bit (0=match, 1=invalid); sbit auto-casts into sint64 Matrix
+            merged_data[i][1] = is_match.if_else(sint64(0), sint64(1))
+            # Broadcast sbit to full 64-bit mask (0x0 or 0xFF...FF) for the AND masking
+            # in extract_activities. Using .if_else directly avoids the sbit-to-sint64
+            # conversion ambiguity that ~x+1 needs.
+            is_match_mask = is_match.if_else(sint64(-1), sint64(0))
 
             # --- Iterative bitonic merge of N_PARTIES * PARTIAL_LEN events ---
-            # Each party's events are pre-sorted ascending by timestamp.
-            # We merge iteratively: P0 (ascending) + P1 (reversed=descending) → merge →
-            #   result (ascending) + P2 (reversed=descending) → merge → ...
+            # Window starts at row i, so events come from rows i, i+1, ..., i+N-1.
 
-            group_start = i - (N_PARTIES - 1)
-
-            # Initialize with party 0's events
+            # Initialize with party 0's events (row i)
             INIT_POW2 = 1
             while INIT_POW2 < PARTIAL_LEN:
                 INIT_POW2 *= 2
@@ -515,8 +490,8 @@ def main():
             cur_pad = [True] * INIT_POW2
 
             for k in range(PARTIAL_LEN):
-                ts = data[group_start][2 + k*2]
-                act = data[group_start][2 + k*2 + 1]
+                ts = data[i][2 + k*2]
+                act = data[i][2 + k*2 + 1]
                 if ENABLE_PARTIAL_ORDERS:
                     is_real = (ts != sint64(MAX_TIME))
                     composite = (ts << ACT_BITS) | act
@@ -549,8 +524,8 @@ def main():
                     m_act[k] = cur_act[k]
                     m_pad[k] = cur_pad[k]
 
-                # Copy new party's events (REVERSED = descending) to end
-                row = group_start + p
+                # Copy new party's events (row i+p, REVERSED = descending) to end
+                row = i + p
                 for k in range(PARTIAL_LEN):
                     idx = POW2 - 1 - k
                     ts = data[row][2 + k*2]
@@ -577,6 +552,10 @@ def main():
 
             # Extract sorted activities into merged_data[i]
             extract_activities(cur_ts, cur_act, i, is_match_mask)
+
+        # Mark last N_PARTIES - 1 rows as invalid (can't start a valid window)
+        for j in range(N_PARTIES - 1):
+            merged_data[TOTAL_N - 1 - j][1] = sint64(1)
 
     stop_timer(NEON_TIMER_RECON)
 
