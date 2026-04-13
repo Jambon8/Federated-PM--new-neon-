@@ -284,6 +284,25 @@ def main():
             step //= 2
         return sort_keys, sort_vals_ts, sort_vals_act, is_padding
 
+    # --- Helper: load PARTIAL_LEN events from data[src_row] into sort buffers ---
+    # positions[k] gives the target index for the k-th event in the row.
+    # Use positions=range(PARTIAL_LEN) for ascending (initial party) or
+    # positions=[end-k for k in ...] for reversed (subsequent parties in bitonic merge).
+    def load_events(src_row, dst_keys, dst_ts, dst_act, dst_pad, positions):
+        for k in range(PARTIAL_LEN):
+            idx = positions[k]
+            ts = data[src_row][2 + k*2]
+            act = data[src_row][2 + k*2 + 1]
+            if ENABLE_PARTIAL_ORDERS:
+                is_real = (ts != sint64(MAX_TIME))
+                composite = (ts << ACT_BITS) | act
+                dst_keys[idx] = is_real.if_else(composite, sint64(MAX_TIME))
+            else:
+                dst_keys[idx] = ts
+            dst_ts[idx] = ts
+            dst_act[idx] = act
+            dst_pad[idx] = False
+
     # --- Helper: extract sorted activities into merged_data ---
     def extract_activities(sort_vals_ts, sort_vals_act, target_row, is_match_mask):
         # is_match_mask: sint64 with all 64 bits = match_bit (N>=3),
@@ -353,18 +372,8 @@ def main():
         cur_act = [sint64(0)] * INIT_POW2
         cur_pad = [True] * INIT_POW2
 
-        for k in range(PARTIAL_LEN):
-            ts = data[i][2 + k*2]
-            act = data[i][2 + k*2 + 1]
-            if ENABLE_PARTIAL_ORDERS:
-                is_real = (ts != sint64(MAX_TIME))
-                composite = (ts << ACT_BITS) | act
-                cur_keys[k] = is_real.if_else(composite, sint64(MAX_TIME))
-            else:
-                cur_keys[k] = ts
-            cur_ts[k] = ts
-            cur_act[k] = act
-            cur_pad[k] = False
+        # Load row i's events ascending at positions [0..PARTIAL_LEN-1]
+        load_events(i, cur_keys, cur_ts, cur_act, cur_pad, list(range(PARTIAL_LEN)))
 
         merged_count = PARTIAL_LEN
 
@@ -388,21 +397,9 @@ def main():
                 m_act[k] = cur_act[k]
                 m_pad[k] = cur_pad[k]
 
-            # Copy new party's events (row i+p, REVERSED = descending) to end
-            row = i + p
-            for k in range(PARTIAL_LEN):
-                idx = POW2 - 1 - k
-                ts = data[row][2 + k*2]
-                act = data[row][2 + k*2 + 1]
-                if ENABLE_PARTIAL_ORDERS:
-                    is_real = (ts != sint64(MAX_TIME))
-                    composite = (ts << ACT_BITS) | act
-                    m_keys[idx] = is_real.if_else(composite, sint64(MAX_TIME))
-                else:
-                    m_keys[idx] = ts
-                m_ts[idx] = ts
-                m_act[idx] = act
-                m_pad[idx] = False
+            # Load row i+p's events reversed (descending) at positions [POW2-1..POW2-PARTIAL_LEN]
+            reversed_positions = [POW2 - 1 - k for k in range(PARTIAL_LEN)]
+            load_events(i + p, m_keys, m_ts, m_act, m_pad, reversed_positions)
 
             # Pruned bitonic merge
             pruned_bitonic_merge(m_keys, m_ts, m_act, m_pad, POW2)
@@ -428,30 +425,20 @@ def main():
     #neon_timer: Hashing NEON_TIMER_HASH
     start_timer(NEON_TIMER_HASH)
     
-    # Write hashes directly into merged_data[i][0]
+    # Write hashes directly into merged_data[i][0].
+    # All operations are XOR/shift → 0 AND gates, 0 communication, free.
+    # When PO is enabled, merged_data[i][2+k] stores packed (activity | conc_bit<<32);
+    # when PO is disabled it stores plain activity IDs. The hash is identical either
+    # way because the composite sort key canonicalizes the order within concurrent
+    # groups by activity ID, making a sequential hash order-independent.
     @for_range_opt_multithread(N_THREADS, TOTAL_N)
     def _(i):
         h = sint64(0)
-
-        if ENABLE_PARTIAL_ORDERS:
-            # Sequential hash on packed values (activity | conc_bit << 32).
-            # The composite sort key (ts << 20 | act) already canonicalizes the
-            # order within concurrent groups by activity ID, so a simple sequential
-            # hash is order-independent in practice.  The conc_bit distinguishes
-            # sequential A -> B from concurrent {A, B}.  All operations are XOR
-            # and shift — 0 AND gates, 0 communication, free.
-            for k in range(1 + FULL_LEN):
-                val = merged_data[i][1 + k]
-                h = h ^ val
-                h = h ^ (h << 10)
-                h = h ^ (h >> 6)
-        else:
-            # Original hash: match_bit + activity sequence
-            for k in range(1 + FULL_LEN):
-                val = merged_data[i][1 + k]
-                h = h ^ val
-                h = h ^ (h << 10)
-                h = h ^ (h >> 6)
+        for k in range(1 + FULL_LEN):
+            val = merged_data[i][1 + k]
+            h = h ^ val
+            h = h ^ (h << 10)
+            h = h ^ (h >> 6)
 
         h = h ^ (h << 3)
         h = h ^ (h >> 11)
@@ -622,27 +609,34 @@ def main():
     others_counts = Array(TOTAL_N, sint64)
     others_counts.assign_all(0)
     
-    # Pass 1: Compute keep mask, counts, and masked original indices
-    # Uses valid_bit from the narrow sorted matrix (no secret indexing needed)
+    # Pass 1: Compute keep mask, counts, and masked original indices.
+    # Uses valid_bit from the narrow sorted matrix (no secret indexing needed).
+    # THRESHOLD comparison is only compiled when it can matter — when THRESHOLD>1
+    # (filtering) or when DP is enabled (noise can push counts negative). When
+    # THRESHOLD==1 and DP is off, c_counts[i] is always >= 1 at valid-last
+    # positions, so count_ok is tautological and the check is pruned.
     @for_range_opt_multithread(N_THREADS, TOTAL_N)
     def _(i):
-        threshold = threshold_mem.read()
-        
         # Read valid_bit from narrow_keys (carried through the sort)
         valid_bit = narrow_keys[i][2]
         is_valid_trace = (valid_bit == 0)
-        
-        count_ok = (c_counts[i] >= threshold)
         last_bit = (is_last[i] != 0)
-        
-        keep = is_valid_trace & last_bit & count_ok
+        valid_last = is_valid_trace & last_bit
+
+        if THRESHOLD > 1 or ENABLE_DP:
+            threshold = threshold_mem.read()
+            count_ok = (c_counts[i] >= threshold)
+            keep = valid_last & count_ok
+            if ENABLE_K_ANON:
+                is_other = valid_last & (1 - count_ok)
+                others_counts[i] = c_counts[i] * is_other
+        else:
+            keep = valid_last
+            # K_ANON is a no-op when threshold=1 and no DP: nothing falls below.
+
         should_reveal_arr[i] = keep
         revealed_counts[i] = c_counts[i] * keep
 
-        if ENABLE_K_ANON:
-            is_other = is_valid_trace & last_bit & (1 - count_ok)
-            others_counts[i] = c_counts[i] * is_other
-        
         # Mask orig index: kept rows get real index, others get 0
         # This is safe — kept rows' traces are revealed anyway, so their
         # position in merged_data is not additional leakage.
@@ -668,30 +662,23 @@ def main():
 
     traces_list = flat_traces.reveal()
 
-    if ENABLE_PARTIAL_ORDERS:
-        @for_range_opt(TOTAL_N)
-        def _(i):
-            do_print = mask_list[i]
-            @if_(do_print)
-            def _():
-                print_ln("RAW_RESULT Count:%s Trace:", counts_list[i])
-                for k in range(FULL_LEN):
-                    packed = traces_list[i * FULL_LEN + k]
-                    act_val = packed & ((1 << 32) - 1)
-                    conc_val = packed >> 32
+    # Output print loop. PO mode unpacks activity | conc_bit per slot; plain mode
+    # prints each activity ID directly. Structure is identical either way.
+    @for_range_opt(TOTAL_N)
+    def _(i):
+        do_print = mask_list[i]
+        @if_(do_print)
+        def _():
+            print_ln("RAW_RESULT Count:%s Trace:", counts_list[i])
+            for k in range(FULL_LEN):
+                val = traces_list[i * FULL_LEN + k]
+                if ENABLE_PARTIAL_ORDERS:
+                    act_val = val & ((1 << 32) - 1)
+                    conc_val = val >> 32
                     print_ln("%s %s", act_val, conc_val)
-                print_ln("END_TRACE")
-    else:
-        @for_range_opt(TOTAL_N)
-        def _(i):
-            do_print = mask_list[i]
-            @if_(do_print)
-            def _():
-                print_ln("RAW_RESULT Count:%s Trace:", counts_list[i])
-                for k in range(FULL_LEN):
-                    val = traces_list[i * FULL_LEN + k]
+                else:
                     print_ln("%s", val)
-                print_ln("END_TRACE")
+            print_ln("END_TRACE")
             
     if ENABLE_K_ANON:
         total_others = MemValue(sint64(0))
