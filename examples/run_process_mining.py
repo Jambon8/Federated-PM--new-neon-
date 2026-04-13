@@ -82,6 +82,9 @@ def main():
     parser.add_argument("--timestamp-granularity", choices=['ms', 's', 'm', 'h'], default='ms',
                         help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). Both parties must agree on the same value.")
     parser.add_argument("--enable-dp", type=int, default=0, help="Enable Differential Privacy (0/1, default: 0)")
+    parser.add_argument("--protocol", type=str, default="semi",
+                        choices=["semi", "rep-bin", "mal-rep-bin", "ps-rep-bin", "ccd", "mal-ccd"],
+                        help="MPC protocol (default: semi). rep-bin/mal-rep-bin/ps-rep-bin = 3-party only, ccd/mal-ccd = 3+ party honest majority")
     parser.add_argument("--epsilon", type=float, default=1.0, help="DP epsilon parameter (default: 1.0)")
     parser.add_argument("--dp-delta", type=float, default=0.01,
                         help="DP delta parameter for (eps,delta)-DP partition selection (default: 0.01)")
@@ -179,8 +182,18 @@ def main():
         config.delay = args.delay
         print(f"Manual Network Latency Override: {args.delay}")
 
-    # Use SemiBin protocol
-    neon.set_protocol(protocol.Semi)
+    # Protocol selection
+    protocol_map = {
+        'semi': protocol.Semi,
+        'rep-bin': protocol.ReplicatedBin,
+        'mal-rep-bin': protocol.MaliciousRepBin,
+        'ps-rep-bin': protocol.PSRepBin,
+        'ccd': protocol.CCD,
+        'mal-ccd': protocol.MaliciousCCD,
+    }
+    selected_protocol = protocol_map.get(args.protocol, protocol.Semi)
+    print(f"Protocol: {args.protocol}")
+    neon.set_protocol(selected_protocol)
     neon.set_number_of_parties(n_parties)
     neon.set_program("process_mining")
     
