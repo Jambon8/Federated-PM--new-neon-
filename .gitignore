@@ -29,7 +29,11 @@ MIGRATION_NOTES.md
 CLAUDE.md
 
 # Evaluation
-eval/
+eval/*
+!eval/thesis_experiments.py
+!eval/claix_submit.sh
+!eval/claix_setup.sh
+!eval/run_on_hpc.sh
 eval_results/
 
 # Presentations

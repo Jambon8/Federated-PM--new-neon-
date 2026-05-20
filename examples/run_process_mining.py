@@ -88,6 +88,10 @@ def main():
     parser.add_argument("--epsilon", type=float, default=1.0, help="DP epsilon parameter (default: 1.0)")
     parser.add_argument("--dp-delta", type=float, default=0.01,
                         help="DP delta parameter for (eps,delta)-DP partition selection (default: 0.01)")
+    parser.add_argument("--n-per-party-cap", type=int, default=None,
+                        help="Subsample to at most N case-IDs (shared across parties) before encoding. Used by E3 scaling experiments.")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for subsampling (default: 42)")
     args = parser.parse_args()
     ts_granularity = _GRANULARITY_MS[args.timestamp_granularity]
 
@@ -134,6 +138,18 @@ def main():
         else:
             cases = importer.parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
         cases_list.append(cases)
+
+    if args.n_per_party_cap is not None and args.n_per_party_cap > 0:
+        import random
+        rng = random.Random(args.seed)
+        # Subsample on the intersection of case IDs so PSI still finds matches.
+        id_sets = [set(c["id"] for c in cases) for cases in cases_list]
+        shared = sorted(set.intersection(*id_sets))
+        if len(shared) > args.n_per_party_cap:
+            shared = rng.sample(shared, args.n_per_party_cap)
+        keep = set(shared)
+        cases_list = [[c for c in cases if c["id"] in keep] for cases in cases_list]
+        print(f"Subsampled to {len(keep)} shared case IDs (cap={args.n_per_party_cap})")
 
     n_per_party, partial_len = importer.encode_and_save(cases_list)
 
