@@ -94,8 +94,6 @@ def main():
                         help="Random seed for subsampling (default: 42)")
     parser.add_argument("--compile-only", action="store_true",
                         help="Compile the MPC circuit and exit (warms the cache). Used by the precompile pass on HPC.")
-    parser.add_argument("--compile-looping", action="store_true",
-                        help="Pass -l to MP-SPDZ compile: emits loops instead of unrolling. Much smaller bytecode and faster compile for big circuits; slight per-iteration runtime overhead.")
     args = parser.parse_args()
     ts_granularity = _GRANULARITY_MS[args.timestamp_granularity]
 
@@ -248,11 +246,10 @@ def main():
     
     # --- 4. Execute ---
     if args.compile_only:
-        print(f"--- Compiling MPC circuit (compile-only, looping={args.compile_looping}) ---")
+        print("--- Compiling MPC circuit (compile-only) ---")
         import time
         compile_start = time.time()
-        h = neon.compile_and_return_hash(compile_debug=False,
-                                         compile_looping=args.compile_looping)
+        h = neon.compile_and_return_hash(compile_debug=False)
         compile_wall = time.time() - compile_start
         print(f"Compile finished in {compile_wall:.2f}s. Program hash: {h}")
         return
@@ -261,8 +258,7 @@ def main():
     import time
     smpc_start = time.time()
     report = neon.smpc(
-        direct=args.direct,
-        compile_looping=args.compile_looping,
+        direct=args.direct
     )
     smpc_wall = time.time() - smpc_start
 

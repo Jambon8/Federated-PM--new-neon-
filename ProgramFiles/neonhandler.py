@@ -620,8 +620,8 @@ class NeonHandler:
 
 
     # THis is just a temporary hack for the estimation
-    def compile_and_return_hash(self, compile_debug, compile_looping=False):
-        self.__compile(compile_debug=compile_debug, compile_looping=compile_looping)
+    def compile_and_return_hash(self, compile_debug):
+        self.__compile(compile_debug=compile_debug)
         return self.__program_hash
 
 
