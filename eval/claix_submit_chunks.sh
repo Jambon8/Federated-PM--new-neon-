@@ -11,7 +11,7 @@
 set -euo pipefail
 
 CHUNK_SIZE=80                # stay safely below the 100-submit cap
-CONCURRENCY=30               # tasks running at once within a chunk
+CONCURRENCY=10               # tasks running at once within a chunk (lower → easier to schedule on busy cluster)
 TOTAL=$(wc -l < eval/commands.txt)
 QUEUE_THRESHOLD=15           # submit next chunk when ≤ this many array tasks of mine are queued
 
