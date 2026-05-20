@@ -14,6 +14,8 @@
 #        NEON_DATA_ROOT=$HOME python3 eval/thesis_experiments.py --aggregate
 #
 ### --- Job Parameters ---
+# Memory is intentionally NOT set: c23ms gives 2540 MiB / core by default,
+# so 64 cores → ~158 GiB without being billed for extra cores (per CLAIX docs).
 #SBATCH --job-name=neon_eval
 #SBATCH --output=logs/slurm/%A_%a.out
 #SBATCH --error=logs/slurm/%A_%a.err
@@ -22,7 +24,6 @@
 #SBATCH --cpus-per-task=64
 #SBATCH --time=04:00:00
 #SBATCH --partition=c23ms
-#SBATCH --mem=64G
 
 set -euo pipefail
 
