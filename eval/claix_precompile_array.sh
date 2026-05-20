@@ -22,6 +22,10 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --time=01:30:00
 #SBATCH --partition=c23ms
+# MP-SPDZ compile is memory-hungry for big circuits (hospital, bpi12, etc.):
+# default 2540 MiB per core is not enough. 24G covers the worst case (hospital
+# at cost proxy 3.7M) with margin.
+#SBATCH --mem=24G
 
 set -euo pipefail
 
@@ -48,6 +52,8 @@ rsync -a --exclude='eval_results' --exclude='logs/slurm' \
       --exclude='.git' --exclude='__pycache__' \
       "$REPO/" "$SCRATCH/"
 cd "$SCRATCH"
+# Defensive: MP-SPDZ writes into these dirs but does not mkdir them.
+mkdir -p temp/MP/mp-spdz-0.4.2/Programs/{Source,Bytecode,Schedules,asm}
 
 ### --- Run the assigned compile ---
 echo "[$(date)] task=$SLURM_ARRAY_TASK_ID node=$SLURMD_NODENAME starting"

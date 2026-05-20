@@ -48,6 +48,8 @@ rsync -a --exclude='eval_results' --exclude='logs/slurm' \
       "$REPO/" "$SCRATCH/"
 cd "$SCRATCH"
 mkdir -p eval_results logs
+# Defensive: MP-SPDZ writes into these dirs but does not mkdir them.
+mkdir -p temp/MP/mp-spdz-0.4.2/Programs/{Source,Bytecode,Schedules,asm}
 
 ### --- Pick the command for this array index ---
 CMD=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$REPO/eval/commands.txt")
