@@ -33,6 +33,10 @@ eval/*
 !eval/thesis_experiments.py
 !eval/claix_submit.sh
 !eval/claix_setup.sh
+!eval/claix_submit_chunks.sh
+!eval/claix_precompile.sh
+!eval/claix_precompile_array.sh
+!eval/precompile_all.py
 !eval/run_on_hpc.sh
 eval_results/
 

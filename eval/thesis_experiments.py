@@ -187,12 +187,38 @@ def _runs_e6_partial_orders(reps=3):
     return out
 
 
-def _runs_e9_kanon(reps=3):
-    """E9: k-anonymity release profile. Vary k via --threshold while --k-anon=1.
-    k=1 is the no-filter baseline (everything passes); k>=2 filters variants
-    below the threshold and reports `others_below_threshold`."""
+def _runs_e10_protocols(reps=3):
+    """E10: MPC protocol comparison at N=3. Isolates protocol cost (different
+    trust models) by reusing the E4 N=3 splits and varying only --protocol.
+    All runs use the same default k-anon config so the only varying axis is
+    the protocol."""
     out = []
-    ks = [1, 2, 5, 10, 20]
+    # Three protocols spanning the relevant trust models at N=3:
+    #   semi    — passive, dishonest majority (tolerate N-1 corrupt)
+    #   rep-bin — passive, honest majority (replicated 3PC)
+    #   ccd     — passive, honest majority (CCD-based, generalises to N>3)
+    protocols = ["semi", "rep-bin", "ccd"]
+    for dset, proto, rep in itertools.product(
+            ("bpi13_open", "bpi13_closed", "bpi13_incidents"),
+            protocols, range(reps)):
+        logs = N_WAY_DATASETS[dset][3]
+        args = ["--threshold", "1", "--k-anon", "0", "--protocol", proto]
+        proto_tag = proto.replace("-", "_")
+        rid = f"e10__{dset}__{proto_tag}__rep{rep}"
+        out.append((rid, args, 3, logs,
+                    {"experiment": "e10_protocols", "dataset": dset,
+                     "protocol": proto, "rep": rep}))
+    return out
+
+
+def _runs_e9_kanon(reps=3):
+    """E9: k-anonymity in MPC — confirms the filter works correctly and that
+    MPC cost is invariant to k (k-anon is a public post-grouping filter).
+    Three k values suffice for the cost-flatness claim; the full release-profile
+    curve over k is reconstructed from the centralized baseline at aggregation
+    time. The k=1 baseline is already covered by E1 (k-anon=0)."""
+    out = []
+    ks = [2, 5, 20]
     for dset, k, rep in itertools.product(
             ("sepsis", "bpi13_incidents", "requestforpayment"), ks, range(reps)):
         logs = list(N2_DATASETS[dset])
@@ -254,6 +280,7 @@ EXPERIMENTS = {
     "e7": _runs_e7_network,
     "e8": _runs_e8_dp,
     "e9": _runs_e9_kanon,
+    "e10": _runs_e10_protocols,
 }
 
 
