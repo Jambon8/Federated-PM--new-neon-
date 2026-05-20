@@ -20,7 +20,12 @@ set -euo pipefail
 REPO="$HOME/Federated-PM--new-neon-"
 DATA="$HOME"
 
+# Load the same modules used at runtime (libpython3.10.so lives in this module).
+module load GCCcore/11.3.0
+module load Python/3.10.4
+
 cd "$REPO"
+source fed_env/bin/activate
 
 echo "=== Verifying every dataset path used by the experiment plan ==="
 NEON_DATA_ROOT="$DATA" python3 - <<'PY'
