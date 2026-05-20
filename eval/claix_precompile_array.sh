@@ -48,9 +48,19 @@ mkdir -p logs/slurm
 ### --- Per-task scratch directory ---
 SCRATCH="$TMPDIR/neon_pre_$SLURM_ARRAY_JOB_ID/$SLURM_ARRAY_TASK_ID"
 mkdir -p "$SCRATCH"
+# Rsync can return code 24 ("partial transfer due to vanished files") when
+# another array task is concurrently writing back to $REPO. That's a warning,
+# not a real failure — proceed if rc is 0 or 24.
+set +e
 rsync -a --exclude='eval_results' --exclude='logs/slurm' \
       --exclude='.git' --exclude='__pycache__' \
       "$REPO/" "$SCRATCH/"
+rc=$?
+set -e
+if [[ $rc -ne 0 && $rc -ne 24 ]]; then
+    echo "rsync to scratch failed with rc=$rc"
+    exit $rc
+fi
 cd "$SCRATCH"
 # Defensive: MP-SPDZ writes into these dirs but does not mkdir them.
 mkdir -p temp/MP/mp-spdz-0.4.2/Programs/{Source,Bytecode,Schedules,asm}

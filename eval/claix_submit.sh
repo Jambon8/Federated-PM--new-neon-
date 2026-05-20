@@ -43,9 +43,18 @@ export NEON_THREADS="$SLURM_CPUS_PER_TASK"
 # logs/latest/, and temp/MP/.../Programs/ writes do not collide.
 SCRATCH="$TMPDIR/neon_$SLURM_ARRAY_JOB_ID/$SLURM_ARRAY_TASK_ID"
 mkdir -p "$SCRATCH"
+# rc 24 = files vanished mid-rsync; happens when another array task is writing
+# back to $REPO concurrently. Treat as warning, not failure.
+set +e
 rsync -a --exclude='eval_results' --exclude='logs/slurm' \
       --exclude='.git' --exclude='__pycache__' \
       "$REPO/" "$SCRATCH/"
+rc=$?
+set -e
+if [[ $rc -ne 0 && $rc -ne 24 ]]; then
+    echo "rsync to scratch failed with rc=$rc"
+    exit $rc
+fi
 cd "$SCRATCH"
 mkdir -p eval_results logs
 # Defensive: MP-SPDZ writes into these dirs but does not mkdir them.
