@@ -22,10 +22,10 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --time=01:30:00
 #SBATCH --partition=c23ms
-# MP-SPDZ compile is memory-hungry for big circuits (hospital, bpi12, etc.):
-# default 2540 MiB per core is not enough. 24G covers the worst case (hospital
-# at cost proxy 3.7M) with margin.
-#SBATCH --mem=24G
+# MP-SPDZ compile is memory-hungry for big circuits. 24G OOMed on ~15
+# configs (hospital, bpi12, permit, bpi13_incidents N=4/5); 36G should cover
+# them with margin. Bump higher only if individual configs still OOM.
+#SBATCH --mem=36G
 
 set -euo pipefail
 
