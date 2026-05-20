@@ -10,19 +10,64 @@
 
 set -euo pipefail
 
-CHUNK_SIZE=90                # stay safely below the 100-submit cap
+CHUNK_SIZE=80                # stay safely below the 100-submit cap
 CONCURRENCY=30               # tasks running at once within a chunk
 TOTAL=$(wc -l < eval/commands.txt)
-QUEUE_THRESHOLD=20           # submit next chunk when ≤ this many of mine are queued
+QUEUE_THRESHOLD=15           # submit next chunk when ≤ this many array tasks of mine are queued
+
+# Optional first-task index. Use this to resume after a partial submission, e.g.
+#   bash eval/claix_submit_chunks.sh --start 91
+START_FROM=1
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --start) START_FROM=$2; shift 2 ;;
+        *) echo "Unknown arg $1" >&2; exit 2 ;;
+    esac
+done
 
 if [[ $TOTAL -eq 0 ]]; then
     echo "ERROR: eval/commands.txt is empty. Run eval/claix_setup.sh first."
     exit 1
 fi
+if [[ $START_FROM -gt $TOTAL ]]; then
+    echo "Nothing to do — start index $START_FROM > $TOTAL."
+    exit 0
+fi
 
-echo "Total tasks: $TOTAL   chunk=$CHUNK_SIZE   concurrency=$CONCURRENCY"
+# `squeue --me -h -r | wc -l` counts EXPANDED array tasks (one row per task);
+# without -r SLURM collapses an array into a single summary row.
+count_live() {
+    squeue --me -h -r 2>/dev/null | wc -l
+}
 
-start=1
+submit_chunk() {
+    local s=$1 e=$2 idx=$3
+    while true; do
+        echo "[$(date +%H:%M:%S)] Submitting chunk $idx: array=${s}-${e}%${CONCURRENCY}"
+        if sbatch --array=${s}-${e}%${CONCURRENCY} eval/claix_submit.sh; then
+            return 0
+        fi
+        echo "[$(date +%H:%M:%S)] sbatch refused (likely quota). Sleeping 60s and retrying…"
+        sleep 60
+    done
+}
+
+echo "Total tasks: $TOTAL   chunk=$CHUNK_SIZE   concurrency=$CONCURRENCY   start=$START_FROM"
+echo "Starting queue length: $(count_live)"
+
+wait_for_drain() {
+    while true; do
+        live=$(count_live)
+        if [[ $live -le $QUEUE_THRESHOLD ]]; then
+            echo "[$(date +%H:%M:%S)] Queue has $live tasks (≤ $QUEUE_THRESHOLD) — submitting."
+            return 0
+        fi
+        echo "[$(date +%H:%M:%S)] Queue has $live tasks, waiting…"
+        sleep 60
+    done
+}
+
+start=$START_FROM
 chunk_idx=0
 while [[ $start -le $TOTAL ]]; do
     end=$(( start + CHUNK_SIZE - 1 ))
@@ -30,25 +75,14 @@ while [[ $start -le $TOTAL ]]; do
     chunk_idx=$(( chunk_idx + 1 ))
 
     echo
-    echo "[$(date +%H:%M:%S)] Submitting chunk $chunk_idx: array=${start}-${end}%${CONCURRENCY}"
-    sbatch --array=${start}-${end}%${CONCURRENCY} eval/claix_submit.sh
+    # Make sure the queue has room before we try to add this chunk.
+    wait_for_drain
+    submit_chunk $start $end $chunk_idx
 
     start=$(( end + 1 ))
-    [[ $start -gt $TOTAL ]] && break
-
-    # Wait until the queue drains enough for the next chunk.
-    echo "[$(date +%H:%M:%S)] Waiting for queue to drain below $QUEUE_THRESHOLD…"
-    while true; do
-        live=$(squeue --me -h 2>/dev/null | wc -l)
-        if [[ $live -le $QUEUE_THRESHOLD ]]; then
-            echo "[$(date +%H:%M:%S)] Queue has $live jobs — submitting next chunk."
-            break
-        fi
-        sleep 60
-    done
 done
 
 echo
 echo "[$(date +%H:%M:%S)] All $TOTAL tasks submitted across $chunk_idx chunks."
-echo "Monitor with: squeue --me"
+echo "Monitor with:  squeue --me -r        (shows individual array tasks)"
 echo "Aggregate when finished: NEON_DATA_ROOT=\$HOME python3 eval/thesis_experiments.py --aggregate"
