@@ -55,8 +55,17 @@ echo "[$(date)] task=$SLURM_ARRAY_TASK_ID node=$SLURMD_NODENAME cmd: $CMD"
 
 eval "$CMD" || echo "Task $SLURM_ARRAY_TASK_ID FAILED"
 
-### --- Ship the JSON result back to the persistent location ---
+### --- Ship results and compile artifacts back ---
+# eval_results: the per-run JSON
 mkdir -p "$REPO/eval_results"
 rsync -a eval_results/ "$REPO/eval_results/"
+# Compile cache: each task has unique program-hash filenames, so concurrent
+# rsyncs to the same shared dir don't collide. Future tasks see this cache.
+for d in Source Bytecode Schedules; do
+    if [[ -d "temp/MP/mp-spdz-0.4.2/Programs/$d" ]]; then
+        rsync -a "temp/MP/mp-spdz-0.4.2/Programs/$d/" \
+                 "$REPO/temp/MP/mp-spdz-0.4.2/Programs/$d/"
+    fi
+done
 
 echo "[$(date)] task=$SLURM_ARRAY_TASK_ID done"

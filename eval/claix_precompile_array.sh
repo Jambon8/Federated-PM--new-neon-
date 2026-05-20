@@ -34,7 +34,10 @@ cd "$REPO"
 source fed_env/bin/activate
 
 export NEON_DATA_ROOT="$HOME"
-export NEON_THREADS=1
+# NEON_THREADS feeds NEON_ARG_N_THREADS into the .mpc substitution, which
+# changes the program hash. Must match what the eval array sets so caches hit.
+# Note: this is INDEPENDENT of --cpus-per-task — compile itself is single-threaded.
+export NEON_THREADS=64
 
 mkdir -p logs/slurm
 
