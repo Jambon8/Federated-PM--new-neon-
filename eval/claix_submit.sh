@@ -61,7 +61,10 @@ mkdir -p eval_results logs
 mkdir -p temp/MP/mp-spdz-0.4.2/Programs/{Source,Bytecode,Schedules,asm}
 
 ### --- Pick the command for this array index ---
-CMD=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$REPO/eval/commands.txt")
+# Override via sbatch --export=CMDFILE=eval/commands_expansion.txt to run a
+# different list (e.g. the dataset-expansion follow-up batch).
+CMDFILE="${CMDFILE:-eval/commands.txt}"
+CMD=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$REPO/$CMDFILE")
 echo "[$(date)] task=$SLURM_ARRAY_TASK_ID node=$SLURMD_NODENAME cmd: $CMD"
 
 eval "$CMD" || echo "Task $SLURM_ARRAY_TASK_ID FAILED"

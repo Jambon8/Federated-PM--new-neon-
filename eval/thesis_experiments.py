@@ -84,6 +84,12 @@ N_WAY_DATASETS = {
         4: [f"{DATA_ROOT}/bpi13_incidents/split_4/party_{i}.xes" for i in range(4)],
         5: [f"{DATA_ROOT}/bpi13_incidents/split_5/party_{i}.xes" for i in range(5)],
     },
+    "sepsis": {
+        2: list(N2_DATASETS["sepsis"]),
+        3: [f"{DATA_ROOT}/sepsis/split_3/party_{i}.xes" for i in range(3)],
+        4: [f"{DATA_ROOT}/sepsis/split_4/party_{i}.xes" for i in range(4)],
+        5: [f"{DATA_ROOT}/sepsis/split_5/party_{i}.xes" for i in range(5)],
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -92,9 +98,15 @@ N_WAY_DATASETS = {
 # ---------------------------------------------------------------------------
 
 def _runs_e1_correctness():
-    """E1: exact-match vs centralized baseline. 1 run per dataset (deterministic)."""
+    """E1: exact-match vs centralized baseline. 1 run per dataset (deterministic).
+
+    Expanded from 3 to 8 logs to give correctness coverage comparable to
+    Rennert's DFG paper (10-log mega-table). Cheap: one rep per log, no MPC
+    cost beyond a single pipeline run."""
     out = []
-    for dset in ("bpi13_incidents", "sepsis", "requestforpayment"):
+    datasets = ("bpi13_incidents", "sepsis", "requestforpayment",
+                "bpi17_offer", "bpi12", "domestic_decl", "hospital", "permit")
+    for dset in datasets:
         logs = list(N2_DATASETS[dset])
         rid = f"e1__{dset}__default__rep0"
         out.append((rid, ["--threshold", "1", "--k-anon", "0"], 2, logs,
@@ -199,7 +211,7 @@ def _runs_e10_protocols(reps=3):
     #   ccd     — passive, honest majority (CCD-based, generalises to N>3)
     protocols = ["semi", "rep-bin", "ccd"]
     for dset, proto, rep in itertools.product(
-            ("bpi13_open", "bpi13_closed", "bpi13_incidents"),
+            ("bpi13_open", "bpi13_closed", "bpi13_incidents", "sepsis"),
             protocols, range(reps)):
         logs = N_WAY_DATASETS[dset][3]
         args = ["--threshold", "1", "--k-anon", "0", "--protocol", proto]
@@ -445,7 +457,7 @@ def aggregate():
         exp_dir = os.path.join(RESULTS_ROOT, exp)
         if not os.path.isdir(exp_dir):
             continue
-        if not re.match(r"e\d_", exp):
+        if not re.match(r"e\d+_", exp):
             continue
         rows = []
         for fn in sorted(os.listdir(exp_dir)):
