@@ -24,7 +24,31 @@ import csv
 import json
 import os
 import sys
+import signal
+from contextlib import contextmanager
 from datetime import datetime, timedelta
+
+
+class TimeoutError_(Exception):
+    pass
+
+
+@contextmanager
+def timeout(seconds):
+    """Raise TimeoutError_ if the block runs longer than `seconds`.
+
+    pm4py's Inductive Miner / token-replay can hang indefinitely on
+    pathological inputs (e.g. Hospital_log.xes.gz with hundreds of activities
+    + non-conformant tokens). SIGALRM gives us a hard stop."""
+    def _handler(signum, frame):
+        raise TimeoutError_(f"exceeded {seconds}s")
+    old = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
 
 import pandas as pd
 from scipy.stats import wasserstein_distance
@@ -102,31 +126,48 @@ def emd_variants(reference_dist, released_dist):
     return float(wasserstein_distance(idx, idx, u_weights=p, v_weights=q))
 
 
+PM_BUDGET_S = int(os.environ.get("NEON_PM_BUDGET", "300"))
+
+
 def mine_and_score(released_log, original_log):
-    """Run Inductive Miner on released_log, evaluate against original_log."""
+    """Run Inductive Miner on released_log, evaluate against original_log.
+
+    Each pm4py stage is bounded by NEON_PM_BUDGET (default 300 s) to prevent
+    runaway hangs on logs that defeat the miner (e.g. Hospital_log)."""
     if released_log is None or len(released_log) == 0:
         return {"fitness": None, "precision": None}
-    net, im, fm = pm4py.discover_petri_net_inductive(released_log)
+    with timeout(PM_BUDGET_S):
+        net, im, fm = pm4py.discover_petri_net_inductive(released_log)
+    fitness = None
     try:
-        fit_res = pm4py.fitness_token_based_replay(original_log, net, im, fm)
+        with timeout(PM_BUDGET_S):
+            fit_res = pm4py.fitness_token_based_replay(original_log, net, im, fm)
         fitness = fit_res.get("average_trace_fitness")
-    except Exception:
-        fitness = None
+    except Exception as ex:
+        print(f"      fitness failed: {type(ex).__name__}: {ex}")
+    prec = None
     try:
-        prec = pm4py.precision_token_based_replay(original_log, net, im, fm)
-    except Exception:
-        prec = None
+        with timeout(PM_BUDGET_S):
+            prec = pm4py.precision_token_based_replay(original_log, net, im, fm)
+    except Exception as ex:
+        print(f"      precision failed: {type(ex).__name__}: {ex}")
     return {"fitness": fitness, "precision": prec}
 
 
 def process_experiment(exp, datasets_filter):
-    """Walk eval_results/<exp>/*.json, score every release, write CSV."""
+    """Walk eval_results/<exp>/*.json, score every release, write CSV.
+
+    Writes the CSV incrementally so a per-file crash (pm4py OOM on a big log,
+    Inductive Miner stuck on a degenerate input) does not lose earlier work.
+    Per-file exceptions are caught and logged with row['error'] set."""
     exp_dir = os.path.join(RESULTS_ROOT, exp)
     if not os.path.isdir(exp_dir):
         print(f"skip {exp} (no dir)")
         return
 
-    # Cache original logs + variant distributions per dataset.
+    os.makedirs(OUT_DIR, exist_ok=True)
+    csv_path = os.path.join(OUT_DIR, f"{exp}_pm_quality.csv")
+
     original_log_cache = {}
     original_dist_cache = {}
 
@@ -140,54 +181,62 @@ def process_experiment(exp, datasets_filter):
         if datasets_filter and dset not in datasets_filter:
             continue
 
-        if dset not in original_log_cache:
-            path = os.path.join(ROOT, DATASET_LOG_PATH[dset])
-            print(f"  loading reference log: {path}")
-            log = pm4py.read_xes(path) if path.endswith(".xes") else pm4py.read_xes(path)
-            original_log_cache[dset] = log
-            variants_dict = pm4py.get_variants(log)
-            # pm4py 2.7 returns {tuple-of-activity-names: int-count}; 2.5- returned lists.
-            original_dist_cache[dset] = {
-                (k if isinstance(k, tuple) else tuple(k.split(","))):
-                (len(v) if isinstance(v, list) else int(v))
-                for k, v in variants_dict.items()
-            }
-        orig_log = original_log_cache[dset]
-        orig_dist = original_dist_cache[dset]
-
-        released = decode_variants(rec)
-        released_dist = variant_freq(released)
-
-        emd = emd_variants(orig_dist, released_dist) if released_dist else None
-        released_log = variants_to_log(released) if released else None
-        scores = mine_and_score(released_log, orig_log)
-
-        rows.append({
+        row = {
             "experiment": exp,
             "run_id": rec["run_id"],
             "dataset": dset,
             **{k: v for k, v in meta.items() if k not in ("experiment", "dataset")},
-            "variants_released": len(released),
-            "fitness": scores["fitness"],
-            "precision": scores["precision"],
-            "emd": emd,
-        })
-        print(f"  [{i+1}/{len(files)}] {rec['run_id']}: "
-              f"fit={scores['fitness']:.3f} prec={scores['precision'] or 0:.3f} emd={emd:.4f}"
-              if scores["fitness"] is not None and emd is not None
-              else f"  [{i+1}/{len(files)}] {rec['run_id']}: <empty release>")
+            "variants_released": 0,
+            "fitness": None,
+            "precision": None,
+            "emd": None,
+            "error": None,
+        }
+        try:
+            if dset not in original_log_cache:
+                path = os.path.join(ROOT, DATASET_LOG_PATH[dset])
+                print(f"  loading reference log: {path}")
+                with timeout(PM_BUDGET_S):
+                    log = pm4py.read_xes(path)
+                original_log_cache[dset] = log
+                with timeout(PM_BUDGET_S):
+                    variants_dict = pm4py.get_variants(log)
+                original_dist_cache[dset] = {
+                    (k if isinstance(k, tuple) else tuple(k.split(","))):
+                    (len(v) if isinstance(v, list) else int(v))
+                    for k, v in variants_dict.items()
+                }
+            orig_log = original_log_cache[dset]
+            orig_dist = original_dist_cache[dset]
 
-    if not rows:
-        return
-    os.makedirs(OUT_DIR, exist_ok=True)
-    cols = sorted({k for r in rows for k in r})
-    path = os.path.join(OUT_DIR, f"{exp}_pm_quality.csv")
-    with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=cols)
-        w.writeheader()
-        for r in rows:
-            w.writerow(r)
-    print(f"Wrote {path}")
+            released = decode_variants(rec)
+            released_dist = variant_freq(released)
+            row["variants_released"] = len(released)
+
+            if released_dist:
+                row["emd"] = emd_variants(orig_dist, released_dist)
+            released_log = variants_to_log(released) if released else None
+            scores = mine_and_score(released_log, orig_log)
+            row["fitness"]   = scores["fitness"]
+            row["precision"] = scores["precision"]
+
+            f_str = f"{row['fitness']:.3f}" if row["fitness"]   is not None else "n/a"
+            p_str = f"{row['precision']:.3f}" if row["precision"] is not None else "n/a"
+            e_str = f"{row['emd']:.4f}"     if row["emd"]       is not None else "n/a"
+            print(f"  [{i+1}/{len(files)}] {rec['run_id']}: fit={f_str} prec={p_str} emd={e_str}")
+        except Exception as ex:
+            row["error"] = f"{type(ex).__name__}: {ex}"
+            print(f"  [{i+1}/{len(files)}] {rec['run_id']}: FAILED — {row['error']}")
+        rows.append(row)
+
+        # Incremental rewrite so partial progress survives.
+        cols = sorted({k for r in rows for k in r})
+        with open(csv_path, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=cols)
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+    print(f"Wrote {csv_path}")
 
 
 def main():
