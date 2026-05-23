@@ -38,6 +38,11 @@ eval/*
 !eval/claix_precompile_array.sh
 !eval/precompile_all.py
 !eval/run_on_hpc.sh
+!eval/plotting/
+!eval/plotting/plot_stage_breakdown.py
+!eval/plotting/e6_variant_diff.py
+!eval/plotting/e11_pm_quality.py
+!eval/plotting/style.py
 eval_results/
 
 # Presentations
