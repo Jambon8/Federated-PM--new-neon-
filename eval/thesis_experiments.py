@@ -44,6 +44,10 @@ MASTER = f"{DATA_ROOT}/Master_Input"
 N2_DATASETS = {
     "bpi13_incidents":   (f"{MASTER}/OrgA/BPI_Challenge_2013_incidents.xes.gz",
                           f"{MASTER}/OrgB/BPI_Challenge_2013_incidents.xes.gz"),
+    "bpi13_open":        (f"{MASTER}/OrgA/BPI_Challenge_2013_open_problems.xes.gz",
+                          f"{MASTER}/OrgB/BPI_Challenge_2013_open_problems.xes.gz"),
+    "bpi13_closed":      (f"{MASTER}/OrgA/BPI_Challenge_2013_closed_problems.xes.gz",
+                          f"{MASTER}/OrgB/BPI_Challenge_2013_closed_problems.xes.gz"),
     "sepsis":            (f"{MASTER}/OrgA/Sepsis_Cases_OrgA.xes.gz",
                           f"{MASTER}/OrgB/Sepsis_Cases_OrgB.xes.gz"),
     "requestforpayment": (f"{MASTER}/OrgA/RequestForPayment_OrgA.xes.gz",
@@ -243,9 +247,14 @@ def _runs_e9_kanon(reps=3):
 
 
 def _runs_e7_network(reps=3):
+    # Smallest three N=2 logs by MPC round count: bpi13_open (~1.2M rounds),
+    # bpi13_closed (~2.8M), requestforpayment (~14.5M). Larger logs are infeasible
+    # to run locally under sudo at wan-ent latency (5ms × millions of rounds).
+    # E7 measures relative network-preset shape, not absolute throughput, so
+    # smaller logs are fine.
     out = []
     for dset, net, rep in itertools.product(
-            ("requestforpayment", "sepsis", "bpi13_incidents"),
+            ("bpi13_open", "bpi13_closed", "requestforpayment"),
             ("unlimited", "lan", "wan-ent"), range(reps)):
         logs = list(N2_DATASETS[dset])
         args = ["--threshold", "1", "--k-anon", "0",
