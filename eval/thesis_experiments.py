@@ -119,8 +119,12 @@ def _runs_e1_correctness():
 
 
 def _runs_e2_performance(reps=5):
+    """E2 baseline performance — same 8 datasets as E1 for one-to-one
+    correctness-vs-performance row alignment in the chapter's headline table."""
     out = []
-    for dset, rep in itertools.product(("bpi13_incidents", "sepsis", "requestforpayment"), range(reps)):
+    datasets = ("bpi13_incidents", "sepsis", "requestforpayment",
+                "bpi17_offer", "bpi12", "domestic_decl", "hospital", "permit")
+    for dset, rep in itertools.product(datasets, range(reps)):
         logs = list(N2_DATASETS[dset])
         rid = f"e2__{dset}__default__rep{rep}"
         out.append((rid, ["--threshold", "1", "--k-anon", "0"], 2, logs,
@@ -247,11 +251,11 @@ def _runs_e9_kanon(reps=3):
 
 
 def _runs_e7_network(reps=3):
-    # Smallest three N=2 logs by MPC round count: bpi13_open (~1.2M rounds),
-    # bpi13_closed (~2.8M), requestforpayment (~14.5M). Larger logs are infeasible
-    # to run locally under sudo at wan-ent latency (5ms × millions of rounds).
-    # E7 measures relative network-preset shape, not absolute throughput, so
-    # smaller logs are fine.
+    # Three smallest N=2 logs by MPC round count: bpi13_open (~1.2M rounds),
+    # bpi13_closed (~2.8M), requestforpayment (~14.5M). E7 runs locally with
+    # sudo (CLAIX denies CAP_NET_ADMIN); at wan-ent latency (5ms × millions of
+    # rounds) larger logs are infeasible on a laptop. The latency multiplier
+    # is dataset-invariant across the three.
     out = []
     for dset, net, rep in itertools.product(
             ("bpi13_open", "bpi13_closed", "requestforpayment"),
