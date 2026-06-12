@@ -12,7 +12,8 @@ set -euo pipefail
 
 CHUNK_SIZE=80                # stay safely below the 100-submit cap
 CONCURRENCY=10               # tasks running at once within a chunk (lower → easier to schedule on busy cluster)
-TOTAL=$(wc -l < eval/commands.txt)
+CMDFILE="${CMDFILE:-eval/commands.txt}"   # override via:  CMDFILE=eval/commands_foo.txt bash eval/claix_submit_chunks.sh
+TOTAL=$(wc -l < "$CMDFILE")
 QUEUE_THRESHOLD=15           # submit next chunk when ≤ this many array tasks of mine are queued
 
 # Optional first-task index. Use this to resume after a partial submission, e.g.
@@ -26,7 +27,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $TOTAL -eq 0 ]]; then
-    echo "ERROR: eval/commands.txt is empty. Run eval/claix_setup.sh first."
+    echo "ERROR: $CMDFILE is empty. Run eval/claix_setup.sh first (or set CMDFILE)."
     exit 1
 fi
 if [[ $START_FROM -gt $TOTAL ]]; then
@@ -44,7 +45,7 @@ submit_chunk() {
     local s=$1 e=$2 idx=$3
     while true; do
         echo "[$(date +%H:%M:%S)] Submitting chunk $idx: array=${s}-${e}%${CONCURRENCY}"
-        if sbatch --array=${s}-${e}%${CONCURRENCY} eval/claix_submit.sh; then
+        if sbatch --export=ALL,CMDFILE="$CMDFILE" --array=${s}-${e}%${CONCURRENCY} eval/claix_submit.sh; then
             return 0
         fi
         echo "[$(date +%H:%M:%S)] sbatch refused (likely quota). Sleeping 60s and retrying…"
@@ -52,7 +53,7 @@ submit_chunk() {
     done
 }
 
-echo "Total tasks: $TOTAL   chunk=$CHUNK_SIZE   concurrency=$CONCURRENCY   start=$START_FROM"
+echo "Cmdfile: $CMDFILE   total tasks: $TOTAL   chunk=$CHUNK_SIZE   concurrency=$CONCURRENCY   start=$START_FROM"
 echo "Starting queue length: $(count_live)"
 
 wait_for_drain() {

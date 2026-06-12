@@ -295,6 +295,31 @@ def _runs_e8_dp(reps=5):
     return out
 
 
+def _runs_e8b_dp_delta(reps=5):
+    """DP delta-sweep ablation at the four E8 epsilons on the three E8 datasets.
+
+    Keeps the existing E8 grid (epsilon-sweep at delta=0.01) intact and adds
+    three tighter delta values per (dataset, epsilon) cell so the (epsilon, delta)
+    plane is sampled. The baseline (epsilon=None) is delta-independent and is
+    not repeated here.
+    """
+    out = []
+    epsilons = [0.1, 0.5, 1.0, 2.0]
+    deltas = [1e-3, 1e-4, 1e-5]
+    for dset, eps, delta, rep in itertools.product(
+            ("sepsis", "bpi12", "international_decl"), epsilons, deltas, range(reps)):
+        logs = list(N2_DATASETS[dset])
+        args = ["--threshold", "1", "--k-anon", "1", "--enable-dp", "1",
+                "--epsilon", str(eps), "--dp-delta", str(delta)]
+        eps_tag = f"eps{eps}".replace(".", "p")
+        delta_tag = f"d{delta:.0e}".replace("e-0", "e-").replace("e-", "em")
+        rid = f"e8b__{dset}__{eps_tag}__{delta_tag}__rep{rep}"
+        out.append((rid, args, 2, logs,
+                    {"experiment": "e8b_dp_delta", "dataset": dset,
+                     "epsilon": eps, "dp_delta": delta, "rep": rep}))
+    return out
+
+
 EXPERIMENTS = {
     "e1": _runs_e1_correctness,
     "e2": _runs_e2_performance,
@@ -304,6 +329,7 @@ EXPERIMENTS = {
     "e6": _runs_e6_partial_orders,
     "e7": _runs_e7_network,
     "e8": _runs_e8_dp,
+    "e8b": _runs_e8b_dp_delta,
     "e9": _runs_e9_kanon,
     "e10": _runs_e10_protocols,
 }
@@ -470,7 +496,7 @@ def aggregate():
         exp_dir = os.path.join(RESULTS_ROOT, exp)
         if not os.path.isdir(exp_dir):
             continue
-        if not re.match(r"e\d+_", exp):
+        if not re.match(r"e\d+[a-z]*_", exp):
             continue
         rows = []
         for fn in sorted(os.listdir(exp_dir)):
