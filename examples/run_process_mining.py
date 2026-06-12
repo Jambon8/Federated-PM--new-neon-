@@ -235,8 +235,10 @@ def main():
         dp_k = compute_dp_k(args.epsilon, args.dp_delta)
         print(f"DP partition selection: epsilon={args.epsilon}, delta={args.dp_delta}, k={dp_k}")
         neon.set_substitution('NEON_ARG_DP_K', dp_k)
-        # Override threshold: k and threshold must be coupled for (eps,delta)-DP guarantee
-        neon.set_substitution('NEON_ARG_THRESHOLD', dp_k)
+        # Override threshold: the (eps,delta)-DP guarantee (Desfontaines et al.,
+        # Thm. 6) requires the STRICT release rule "noisy count > k". The MPC
+        # program tests "count >= THRESHOLD", so pass k+1 (integers: > k <=> >= k+1).
+        neon.set_substitution('NEON_ARG_THRESHOLD', dp_k + 1)
     else:
         neon.set_substitution('NEON_ARG_DP_K', 0)
 

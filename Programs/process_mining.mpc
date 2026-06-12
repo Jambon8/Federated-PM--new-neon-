@@ -505,8 +505,10 @@ def main():
     # --- Step 5.5: (epsilon, delta)-DP Partition Selection via k-TSGD ---
     # Rafiei et al. (ICPM 2022), based on Desfontaines et al. (2022).
     # k (= DP_K) is computed in Python from (epsilon, delta) and serves as both
-    # the noise truncation bound and the frequency threshold (coupled for the
-    # (epsilon, delta)-DP guarantee). THRESHOLD is set to k by the Python driver.
+    # the noise truncation bound and the release cutoff (coupled for the
+    # (epsilon, delta)-DP guarantee). The guarantee requires the STRICT rule
+    # "noisy count > k" (Desfontaines et al., Thm. 6); since the release test
+    # below is "count >= THRESHOLD", the Python driver sets THRESHOLD = k + 1.
     if ENABLE_DP:
         import math
         print_ln("--- Adding DP Noise (epsilon=%s/%s, k=%s) ---", EPSILON_NUM, EPSILON_DEN, DP_K)
