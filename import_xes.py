@@ -69,7 +69,56 @@ def _save_fingerprint_map(party_index, fp_map):
         json.dump(fp_map, f)
     print(f"Saved {len(fp_map)} fingerprint reversal entries to '{path}'")
 
-def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_index=0):
+# --- Global handover list H (public, applied identically by every party) ---
+# An activity is a handover (boundary) event iff it belongs to the single
+# global list H. Both parties apply the same H, so a trace shared by both
+# collapses identically on every side and the PSI match is preserved. In
+# deployment H is curated by the participating organizations; for evaluation
+# it is derived as the UNION of activities flagged in any log.
+
+def _iter_xes_events(filepath):
+    """Yield (activity, is_flagged) for every event in an XES log, reading the
+    optional per-event handover boolean. Used to derive the global list H."""
+    opener = gzip.open if filepath.endswith(".gz") else open
+    with opener(filepath, 'rb') as f:
+        root = ET.parse(f).getroot()
+    traces = root.findall('.//{http://www.xes-standard.org/}trace') or root.findall('.//trace')
+    for trace in traces:
+        events = trace.findall('{http://www.xes-standard.org/}event') or trace.findall('event')
+        for event in events:
+            act = None
+            for s in (event.findall('{http://www.xes-standard.org/}string') or event.findall('string')):
+                if s.get('key') == 'concept:name':
+                    act = s.get('value')
+            flagged = False
+            for b in (event.findall('{http://www.xes-standard.org/}boolean') or event.findall('boolean')):
+                if b.get('key') == 'handover' and b.get('value') == 'true':
+                    flagged = True
+            yield act, flagged
+
+def derive_handover_union(filepaths):
+    """Return the global handover list H as the UNION of activities flagged
+    handover=true in any of the given logs."""
+    H = set()
+    for filepath in filepaths:
+        for act, flagged in _iter_xes_events(filepath):
+            if flagged and act is not None:
+                H.add(act)
+    return H
+
+def load_handover_list(path):
+    """Read a curated global handover list H: one activity name per line; blank
+    lines and lines beginning with '#' are ignored."""
+    H = set()
+    with open(path) as f:
+        for line in f:
+            s = line.strip()
+            if s and not s.startswith("#"):
+                H.add(s)
+    return H
+
+def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_index=0,
+              handover_activities=None):
     """Parses .xes.gz and returns list of cases: {'id': str, 'events': [(time, act), ...]}"""
     print(f"Reading {filepath}... (Use Handovers: {use_handovers})")
     
@@ -92,6 +141,12 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
     # Per-party keyed-fingerprint state for the optional handover collapse.
     fp_key = _load_or_create_fp_key(party_index) if use_handovers else None
     fp_map = {}  # fingerprint label -> internal activity subtrace (private reversal table)
+
+    # The global handover list H, shared by every party (empty when unused).
+    H = handover_activities or set()
+    if use_handovers and not H:
+        print("Warning: handover collapse requested with an empty global list H; "
+              "every event becomes internal.")
 
     # Try to find traces with namespace first, then without
     traces = root.findall('.//{http://www.xes-standard.org/}trace')
@@ -155,16 +210,10 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
                 if string.get('key') == 'concept:name':
                     activity = string.get('value')
 
-            # Find boolean handover flag if present (default to false if missing)
-            is_handover = False
-            if use_handovers:
-                bool_attrs = event.findall('{http://www.xes-standard.org/}boolean')
-                if not bool_attrs:
-                    bool_attrs = event.findall('boolean')
-                for b_attr in bool_attrs:
-                    if b_attr.get('key') == 'handover' and b_attr.get('value') == 'true':
-                        is_handover = True
-                        break
+            # An activity is a handover (boundary) event iff it is in the global
+            # list H. The same public H is applied by every party, so a shared
+            # trace collapses identically on all sides.
+            is_handover = use_handovers and activity in H
 
             raw_events.append((timestamp, activity, is_handover))
 
@@ -301,6 +350,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("logs", nargs='+', help="Paths to XES log files (one per party, minimum 2)")
     parser.add_argument("--use-handovers", action="store_true")
+    parser.add_argument("--handover-activities", type=str, default=None,
+                        help="Path to the global handover list H (one activity per line). "
+                             "With --use-handovers, defaults to the union of activities flagged in the logs.")
     parser.add_argument("--timestamp-granularity", choices=['ms', 's', 'm', 'h'], default='ms',
                         help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). All parties must use the same value.")
     args = parser.parse_args()
@@ -310,9 +362,20 @@ if __name__ == "__main__":
         sys.exit(1)
 
     granularity = GRANULARITY_MS[args.timestamp_granularity]
+
+    handover_set = None
+    if args.use_handovers:
+        if args.handover_activities:
+            handover_set = load_handover_list(args.handover_activities)
+            print(f"Loaded {len(handover_set)} handover activities from '{args.handover_activities}'")
+        else:
+            handover_set = derive_handover_union(args.logs)
+            print(f"Derived global handover list H (union) with {len(handover_set)} activities")
+
     cases_list = []
     for p, path in enumerate(args.logs):
-        cases = parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=granularity, party_index=p)
+        cases = parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=granularity,
+                          party_index=p, handover_activities=handover_set)
         if not cases:
             print(f"Failed to load log: {path}")
             sys.exit(1)
