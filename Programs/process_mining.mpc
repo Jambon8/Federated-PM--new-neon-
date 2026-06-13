@@ -515,73 +515,51 @@ def main():
         #neon_timer: DP Noise NEON_TIMER_DP_NOISE
         start_timer(NEON_TIMER_DP_NOISE)
 
-        # Compile-time computation of Bernoulli parameters
+        # Exact k-TSGD(p, k) sampling via inverse-CDF over a secret uniform.
+        # pmf(x) = q^|x| / Z on x in [-k, k], q = e^(-epsilon) = 1 - p,
+        # Z = (1 + q - 2 q^(k+1)) / (1 - q)  (Desfontaines et al., Def. 6).
+        # The CDF thresholds are PUBLIC compile-time constants; only the
+        # uniform draw R is secret. X = -k + #{thresholds <= R}, so the
+        # sampled marginal equals the k-TSGD up to the 2^-M_BITS grid
+        # (total-variation distance < 2k * 2^-M_BITS).
         epsilon = EPSILON_NUM / EPSILON_DEN
-        p_float = math.exp(-epsilon)  # probability for geometric distribution
-        M_BITS = 32  # precision of Bernoulli coin
-        P_SCALED = int(p_float * (2**M_BITS))
+        q_float = math.exp(-epsilon)  # geometric ratio q = 1 - p
+        M_BITS = 32  # precision of the uniform draw
         # k serves as truncation bound: noise ~ k-TSGD(p, k) in [-k, k]
         MAX_NOISE = DP_K
 
         # Use M_BITS+1 so sign bit is always 0 (unsigned comparison)
         # Without this, sbitint signed comparison treats half the random
-        # values as negative, inflating Bernoulli success probability.
+        # values as negative, distorting the threshold comparisons.
         sintM = sbitint.get_type(M_BITS + 1)
 
-        # Adaptive geometric sampling: bit-decomposed (O(log k)) vs sequential (O(k))
-        # Bit j of Geometric(1-p) is independent Bernoulli with prob p^(2^j)/(1+p^(2^j))
-        # (Ghosh et al. STOC 2009, Champion et al. CCS 2019).
-        # Precision requirement: p^(2^n_bits) < 2^(-M_BITS) to match Bernoulli precision.
-        n_bits_required = int(math.ceil(math.log2(max(2, M_BITS * math.log(2) / epsilon))))
-        n_bits_required = max(n_bits_required, int(math.ceil(math.log2(MAX_NOISE + 1))))
-        # +1 accounts for the additional clamp comparison in the bit-decomposed path
-        USE_BITDECOMP = (n_bits_required + 1 < MAX_NOISE)
+        # CDF table F(-k), F(-k+1), ..., F(k-1): 2k thresholds on the
+        # 2^M_BITS grid. F(k) = 1 is omitted (R < 2^M_BITS always).
+        Z = (1.0 + q_float - 2.0 * q_float ** (MAX_NOISE + 1)) / (1.0 - q_float)
+        cdf_thresholds = []
+        acc = 0.0
+        for x in range(-MAX_NOISE, MAX_NOISE):
+            acc += (q_float ** abs(x)) / Z
+            t = int(round(acc * (2 ** M_BITS)))
+            cdf_thresholds.append(min(2 ** M_BITS - 1, max(1, t)))
+        print_ln("DP sampling: inverse-CDF k-TSGD (%s thresholds, %s-bit uniform)", 2 * MAX_NOISE, M_BITS)
 
-        if USE_BITDECOMP:
-            print_ln("DP sampling: bit-decomposed (%s bits vs k=%s sequential)", n_bits_required, MAX_NOISE)
-            # Precompute per-bit thresholds at compile time
-            bit_thresholds = []
-            for j in range(n_bits_required):
-                p_j = (p_float ** (2**j)) / (1.0 + p_float ** (2**j))
-                bit_thresholds.append(int(p_j * (2**M_BITS)))
+        def sample_ktsgd():
+            # One secret uniform draw, 2k comparisons against public thresholds
+            random_bits = [sbit.get_random_bit() for _ in range(M_BITS)]
+            R = sintM.bit_compose(random_bits)
+            X = sint64(-MAX_NOISE)
+            for t in cdf_thresholds:
+                ge = (R >= sintM(t))
+                X = X + ge.if_else(sint64(1), sint64(0))
+            return X
 
-            def sample_geometric():
-                G = sint64(0)
-                for j in range(n_bits_required):
-                    random_bits = [sbit.get_random_bit() for _ in range(M_BITS)]
-                    R = sintM.bit_compose(random_bits)
-                    bit_val = (R < sintM(bit_thresholds[j]))
-                    G = G + bit_val.if_else(sint64(2**j), sint64(0))
-                # Clamp to MAX_NOISE (handles tail of untruncated geometric)
-                over = (G > sint64(MAX_NOISE))
-                G = over.if_else(sint64(MAX_NOISE), G)
-                return G
-        else:
-            print_ln("DP sampling: sequential (%s trials, bit-decomp would need %s bits)", MAX_NOISE, n_bits_required)
-            # Helper: sample Geometric(1-p) truncated at k via sequential Bernoulli trials
-            # Returns sint64 in [0, k]
-            def sample_geometric():
-                running = sbit(1)
-                G = sint64(0)
-                for trial in range(MAX_NOISE):
-                    # Bernoulli(p): generate M_BITS random bits, compare against threshold
-                    random_bits = [sbit.get_random_bit() for _ in range(M_BITS)]
-                    R = sintM.bit_compose(random_bits)
-                    coin = (R < sintM(P_SCALED))  # 1 with probability p
-                    still_running = running & coin
-                    increment = still_running.if_else(sint64(1), sint64(0))
-                    G = G + increment
-                    running = still_running
-                return G
-
-        # Apply k-TSGD noise: noise = G1 - G2 where G1, G2 ~ Geometric(1-p) truncated at k
-        # Threshold filtering (count > k) happens in the output phase using THRESHOLD = k
+        # Apply k-TSGD noise per bucket representative.
+        # Threshold filtering (count > k) happens in the output phase via THRESHOLD = k + 1
         # Multithreaded: each row's noise is independent (no cross-iteration dependencies)
         @for_range_opt_multithread(N_THREADS, TOTAL_N)
         def _(i):
-            G1 = sample_geometric()
-            G2 = sample_geometric()
-            noise = G1 - G2
+            noise = sample_ktsgd()
 
             noisy = c_counts[i] + noise
             # Clamp to 0 (no negative counts)
@@ -595,7 +573,7 @@ def main():
         stop_timer(NEON_TIMER_DP_NOISE)
         print_ln("DP_APPLIED Epsilon:%s/%s K:%s", EPSILON_NUM, EPSILON_DEN, DP_K)
 
-    # --- Output (Narrow-Key + Public Index Reveal) ---
+    # --- Output (Compact-and-Shuffle Reveal) ---
     print_ln("--- [TIMESTAMP] Starting Step 6: Output (Batch Reveal) ---")
     #neon_timer: Output Reveal NEON_TIMER_OUTPUT
     start_timer(NEON_TIMER_OUTPUT)
@@ -605,21 +583,30 @@ def main():
     # Must use MemValue to pass to threads
     threshold_mem = MemValue(threshold_sb)
     
-    should_reveal_arr = Array(TOTAL_N, sint64)
-    revealed_counts = Array(TOTAL_N, sint64)
-    masked_orig_idx = Array(TOTAL_N, sint64)
+    # --- Compact-and-shuffle reveal (both release regimes) ---
+    # Revealing the hash-sorted keep mask and the original-index pointers
+    # would disclose data-dependent values beyond the released multiset:
+    # gaps between kept positions in the sorted order give exact true
+    # bucket counts (un-noised even under DP), and a pointer gives the
+    # representative's rank in the case-sorted merge. Instead the release
+    # (A) restores original row order so counts align with payload rows,
+    # (B) keys every row with (notkeep || random bits) and sorts once,
+    # compacting kept rows to the front in uniformly random relative
+    # order, and (C) reveals only masked counts and masked payloads.
+    # The transcript then discloses exactly the released (variant, count)
+    # multiset in both release regimes.
+
     others_counts = Array(TOTAL_N, sint64)
     others_counts.assign_all(0)
-    
-    # Pass 1: Compute keep mask, counts, and masked original indices.
-    # Uses valid_bit from the narrow sorted matrix (no secret indexing needed).
-    # THRESHOLD comparison is only compiled when it can matter — when THRESHOLD>1
-    # (filtering) or when DP is enabled (noise can push counts negative). When
-    # THRESHOLD==1 and DP is off, c_counts[i] is always >= 1 at valid-last
-    # positions, so count_ok is tautological and the check is pruned.
+
+    # Step A: carry [orig_idx, keep, masked_count] back to original order.
+    # The THRESHOLD comparison is only compiled when it can matter — when
+    # THRESHOLD>1 (filtering) or under DP (noise can push counts below).
+    # When THRESHOLD==1 and DP is off, c_counts[i] is always >= 1 at
+    # valid-last positions, so count_ok is tautological and pruned.
+    restore = sint64.Matrix(TOTAL_N, 3)
     @for_range_opt_multithread(N_THREADS, TOTAL_N)
     def _(i):
-        # Read valid_bit from narrow_keys (carried through the sort)
         valid_bit = narrow_keys[i][2]
         is_valid_trace = (valid_bit == 0)
         last_bit = (is_last[i] != 0)
@@ -629,43 +616,59 @@ def main():
             threshold = threshold_mem.read()
             count_ok = (c_counts[i] >= threshold)
             keep = valid_last & count_ok
-            if ENABLE_K_ANON:
+            if ENABLE_K_ANON and not ENABLE_DP:
+                # Aggregate suppression counter (k-anon regime only). Under
+                # DP it would reveal an exact un-noised aggregate of the
+                # suppressed counts and void the (eps,delta) guarantee.
                 is_other = valid_last & (1 - count_ok)
                 others_counts[i] = c_counts[i] * is_other
         else:
             keep = valid_last
             # K_ANON is a no-op when threshold=1 and no DP: nothing falls below.
 
-        should_reveal_arr[i] = keep
-        revealed_counts[i] = c_counts[i] * keep
+        restore[i][0] = narrow_keys[i][1]
+        restore[i][1] = keep.if_else(sint64(1), sint64(0))
+        restore[i][2] = c_counts[i] * keep
+    restore.sort(key_indices=[0], n_threads=N_THREADS)
 
-        # Mask orig index: kept rows get real index, others get 0
-        # This is safe — kept rows' traces are revealed anyway, so their
-        # position in merged_data is not additional leakage.
-        masked_orig_idx[i] = keep.if_else(narrow_keys[i][1], sint64(0))
-
-    # Batch reveal: keep mask, counts, and masked original indices
-    mask_list = should_reveal_arr.reveal()
-    counts_list = revealed_counts.reveal()
-    revealed_orig = masked_orig_idx.reveal()  # regint — safe for public indexing
-
-    # Pass 2: Build flat array for activities (packed with conc_bit when PO)
-    flat_traces = Array(TOTAL_N * FULL_LEN, sint64)
-    flat_traces.assign_all(0)
-
+    # Step B: shuffle-sort the release matrix. Kept rows draw keys in
+    # [0, 2^SHUF_BITS), suppressed rows in [2^SHUF_BITS, 2^(SHUF_BITS+1)),
+    # so kept rows sort to the front; the random bits make the relative
+    # order within each class uniform (collision prob ~ T^2 / 2^41).
+    SHUF_BITS = 40
+    REL_COLS = 3 + FULL_LEN  # [key, keep, masked_count, payload...]
+    release_m = sint64.Matrix(TOTAL_N, REL_COLS)
     @for_range_opt_multithread(N_THREADS, TOTAL_N)
     def _(i):
-        public_keep = mask_list[i]
-        public_orig = revealed_orig[i]
-        @if_(public_keep)
-        def _():
-            for k in range(FULL_LEN):
-                flat_traces[i * FULL_LEN + k] = merged_data[public_orig][2 + k]
+        keep_bit = (restore[i][1] != 0)
+        rand_key = sint64.bit_compose(
+            [sbit.get_random_bit() for _ in range(SHUF_BITS)])
+        release_m[i][0] = keep_bit.if_else(
+            sint64(0), sint64(2**SHUF_BITS)) ^ rand_key
+        release_m[i][1] = restore[i][1]
+        release_m[i][2] = restore[i][2]
+        payload_mask = keep_bit.if_else(sint64(-1), sint64(0))
+        for k in range(FULL_LEN):
+            release_m[i][3 + k] = merged_data[i][2 + k] & payload_mask
+    release_m.sort(key_indices=[0], n_threads=N_THREADS)
 
+    # Step C: reveal keep flags (a public-length prefix of ones), masked
+    # counts, and masked payloads. Positions now carry no information.
+    rel_keep = Array(TOTAL_N, sint64)
+    rel_counts = Array(TOTAL_N, sint64)
+    flat_traces = Array(TOTAL_N * FULL_LEN, sint64)
+    @for_range_opt_multithread(N_THREADS, TOTAL_N)
+    def _(i):
+        rel_keep[i] = release_m[i][1]
+        rel_counts[i] = release_m[i][2]
+        for k in range(FULL_LEN):
+            flat_traces[i * FULL_LEN + k] = release_m[i][3 + k]
+    mask_list = rel_keep.reveal()
+    counts_list = rel_counts.reveal()
     traces_list = flat_traces.reveal()
 
-    # Output print loop. PO mode unpacks activity | conc_bit per slot; plain mode
-    # prints each activity ID directly. Structure is identical either way.
+    # Output print loop. PO mode unpacks activity | conc_bit per slot; plain
+    # mode prints each activity ID directly. Structure is identical either way.
     @for_range_opt(TOTAL_N)
     def _(i):
         do_print = mask_list[i]
@@ -681,13 +684,13 @@ def main():
                 else:
                     print_ln("%s", val)
             print_ln("END_TRACE")
-            
-    if ENABLE_K_ANON:
+
+    if ENABLE_K_ANON and not ENABLE_DP:
         total_others = MemValue(sint64(0))
         @for_range_opt(TOTAL_N)
         def _(i):
             total_others.write(total_others.read() + others_counts[i])
-        
+
         print_ln("Others count (below threshold): %s", total_others.read().reveal())
     
     stop_timer(NEON_TIMER_OUTPUT)
