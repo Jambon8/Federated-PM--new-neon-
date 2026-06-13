@@ -10,13 +10,31 @@ def load_activity_map():
     if not os.path.exists(MAP_FILE):
         print(f"Error: {MAP_FILE} not found. Run import_xes.py first.", file=sys.stderr)
         sys.exit(1)
-    
+
     with open(MAP_FILE, 'r') as f:
         # JSON keys are strings ("1", "2"), we verify this structure
         return json.load(f)
 
-def decode_stream(input_stream):
+def load_reversal_map(party_indices=None, reveal_all=False):
+    """Load private fingerprint reversal tables. Hidden by default: with no
+    party selected, returns an empty map and fingerprint labels stay opaque.
+    `self` reveal passes the owning party's index; `peer` reveal passes the
+    disclosing party's index (the receiver applies the table it was given)."""
+    rev = {}
+    if reveal_all:
+        import glob
+        paths = glob.glob("Player-Data/fingerprint_map_P*.json")
+    else:
+        paths = [f"Player-Data/fingerprint_map_P{p}.json" for p in (party_indices or [])]
+    for path in paths:
+        if os.path.exists(path):
+            with open(path) as f:
+                rev.update(json.load(f))
+    return rev
+
+def decode_stream(input_stream, reversal_map=None):
     act_map = load_activity_map()
+    reversal_map = reversal_map or {}
     
     # Regex to find the start of a result block
     # Matches: "RAW_RESULT Count:5 Trace:"
@@ -91,6 +109,16 @@ def decode_stream(input_stream):
                     if act_id == "0":
                         continue
                     name = act_map.get(act_id, f"Unknown({act_id})")
+                    expanded = reversal_map.get(name)
+                    if expanded is not None:
+                        # Reveal: splice the internal subtrace back in as
+                        # sequential (non-concurrent) steps in place of the label.
+                        if current_set:
+                            steps.append(current_set)
+                            current_set = []
+                        for internal_act in expanded:
+                            steps.append([internal_act])
+                        continue
                     if conc_bit == "1" and current_set:
                         current_set.append(name)
                     else:
@@ -158,9 +186,19 @@ def decode_stream(input_stream):
     print("-" * 60)
 
 if __name__ == "__main__":
-    # Read from File if provided, otherwise Standard Input (Pipe)
-    if len(sys.argv) > 1:
-        with open(sys.argv[1], 'r') as f:
-            decode_stream(f)
+    import argparse
+    ap = argparse.ArgumentParser(description="Decode MPC process-mining output.")
+    ap.add_argument("input", nargs="?", help="Output file to decode (default: stdin).")
+    ap.add_argument("--reveal-from", type=int, action="append", default=[], metavar="P",
+                    help="Apply party P's fingerprint reversal table (repeatable). "
+                         "Hidden by default; fingerprint labels stay opaque without it.")
+    ap.add_argument("--reveal-all", action="store_true",
+                    help="Apply every fingerprint reversal table in Player-Data.")
+    args = ap.parse_args()
+
+    reversal = load_reversal_map(args.reveal_from, args.reveal_all)
+    if args.input:
+        with open(args.input, 'r') as f:
+            decode_stream(f, reversal_map=reversal)
     else:
-        decode_stream(sys.stdin)
+        decode_stream(sys.stdin, reversal_map=reversal)

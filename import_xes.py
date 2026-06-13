@@ -6,6 +6,7 @@ import json
 import os
 import struct
 import hashlib
+import hmac
 
 # --- Configuration ---
 
@@ -28,7 +29,47 @@ PAD_ID = 2**60 # Use Max 64-bit value for ID padding to stay sorted at end
 # Timestamp granularity options: name -> milliseconds
 GRANULARITY_MS = {'ms': 1, 's': 1000, 'm': 60_000, 'h': 3_600_000}
 
-def parse_xes(filepath, use_handovers=False, timestamp_granularity=1):
+# --- Keyed reversible fingerprints for the optional handover collapse ---
+# Each party replaces every maximal run of internal (non-handover) activities
+# with one keyed fingerprint and keeps a PRIVATE reversal table mapping the
+# fingerprint back to its internal activity sequence. The key is a persisted
+# per-party secret, so (a) the label is stable across runs (determinism) and
+# (b) the peer cannot brute-force the run from the public label -- expansion is
+# possible only by the owning party, which makes any disclosure opt-in.
+
+def _fp_key_path(party_index):
+    return os.path.join(BASE_DIR, f"Player-Data/fp_key_P{party_index}.bin")
+
+def _load_or_create_fp_key(party_index):
+    path = _fp_key_path(party_index)
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return f.read()
+    key = os.urandom(32)
+    with open(path, "wb") as f:
+        f.write(key)
+    return key
+
+def _collapse_run(run, fp_key, fp_map):
+    """Replace one maximal internal run with a keyed fingerprint event placed at
+    the run's last timestamp; record the reversal mapping (asserting injectivity).
+    `run` is a list of (timestamp, activity) in temporal order."""
+    acts = [a for (t, a) in run]
+    msg = "\x1f".join(acts).encode("utf-8")            # unambiguous run encoding
+    digest = hmac.new(fp_key, msg, hashlib.sha256).hexdigest()[:16]  # 64-bit label
+    label = f"Fingerprint_{digest}"
+    if fp_map.get(label, acts) != acts:
+        raise ValueError(f"Fingerprint collision on {label}: {fp_map[label]} vs {acts}")
+    fp_map[label] = acts
+    return (run[-1][0], label)
+
+def _save_fingerprint_map(party_index, fp_map):
+    path = os.path.join(BASE_DIR, f"Player-Data/fingerprint_map_P{party_index}.json")
+    with open(path, "w") as f:
+        json.dump(fp_map, f)
+    print(f"Saved {len(fp_map)} fingerprint reversal entries to '{path}'")
+
+def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_index=0):
     """Parses .xes.gz and returns list of cases: {'id': str, 'events': [(time, act), ...]}"""
     print(f"Reading {filepath}... (Use Handovers: {use_handovers})")
     
@@ -47,7 +88,11 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1):
         return []
 
     cases = []
-    
+
+    # Per-party keyed-fingerprint state for the optional handover collapse.
+    fp_key = _load_or_create_fp_key(party_index) if use_handovers else None
+    fp_map = {}  # fingerprint label -> internal activity subtrace (private reversal table)
+
     # Try to find traces with namespace first, then without
     traces = root.findall('.//{http://www.xes-standard.org/}trace')
     if not traces:
@@ -72,24 +117,23 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1):
                     case_id = attr.get('value')
                     break
         
-        events = []
-        
+        # Collect every event with its handover flag, in document order.
+        raw_events = []  # (timestamp, activity, is_handover)
+
         # Try to find events with namespace first, then without
         event_list = trace.findall('{http://www.xes-standard.org/}event')
         if not event_list:
             event_list = trace.findall('event')
-            
-        full_events = []
-            
+
         for event in event_list:
             timestamp = 0
             activity = "Unknown"
-            
+
             # Extract Timestamp - try with namespace first
             date_attrs = event.findall('{http://www.xes-standard.org/}date')
             if not date_attrs:
                 date_attrs = event.findall('date')
-                
+
             for date in date_attrs:
                 if date.get('key') == 'time:timestamp':
                     # Parse ISO 8601 (e.g., 2012-03-01T00:00:00.000+01:00)
@@ -101,49 +145,50 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1):
                         timestamp = (timestamp // timestamp_granularity) * timestamp_granularity
                     except ValueError:
                         pass # Handle format errors if needed
-            
+
             # Extract Activity Name - try with namespace first
             string_attrs = event.findall('{http://www.xes-standard.org/}string')
             if not string_attrs:
                 string_attrs = event.findall('string')
-                
+
             for string in string_attrs:
                 if string.get('key') == 'concept:name':
                     activity = string.get('value')
-            
-            # Keep track of the full sequence for fingerprinting
-            full_events.append((timestamp, activity))
-            
-            # Ensure handover logic
+
+            # Find boolean handover flag if present (default to false if missing)
+            is_handover = False
             if use_handovers:
-                # Find boolean handover flag if present (default to false if missing)
-                is_handover = False
                 bool_attrs = event.findall('{http://www.xes-standard.org/}boolean')
                 if not bool_attrs:
                     bool_attrs = event.findall('boolean')
-                    
                 for b_attr in bool_attrs:
                     if b_attr.get('key') == 'handover' and b_attr.get('value') == 'true':
                         is_handover = True
                         break
-                        
-                if not is_handover:
-                    # Skip this event completely because it is not a handover point
-                    continue
 
-            events.append((timestamp, activity))
-            
-        if use_handovers and full_events:
-            # Generate a Secure Hash Fingerprint of the original local sequence
-            # This ensures that traces with identical handovers but different internal logic do not collide
-            hash_input = "".join([act for t, act in full_events]).encode('utf-8')
-            fingerprint_hash = hashlib.md5(hash_input).hexdigest()[:8]
-            fingerprint_act = f"Fingerprint_{fingerprint_hash}"
-            
-            # Assign a timestamp + 1s to ensure it sorts strictly to the end of the local case
-            max_time = max(t for t, act in full_events)
-            events.append((max_time + 1, fingerprint_act))
-        
+            raw_events.append((timestamp, activity, is_handover))
+
+        if use_handovers:
+            # Per-run handover collapse (def:handover-collapse): order events in
+            # time, then replace every maximal run of internal (non-handover)
+            # events with a single keyed fingerprint placed at the run's last
+            # timestamp; handover events are kept unchanged.
+            raw_events.sort(key=lambda x: (x[0], x[1]))
+            events = []
+            run = []  # accumulated internal events (timestamp, activity)
+            for (t, act, is_h) in raw_events:
+                if is_h:
+                    if run:
+                        events.append(_collapse_run(run, fp_key, fp_map))
+                        run = []
+                    events.append((t, act))
+                else:
+                    run.append((t, act))
+            if run:
+                events.append(_collapse_run(run, fp_key, fp_map))
+        else:
+            events = [(t, act) for (t, act, _h) in raw_events]
+
         # Sort events by (timestamp, activity_name) to ensure local sorted invariant.
         # Tiebreaking by activity_name makes the composite key (ts << 20 | act_id)
         # monotonic within each party, which the bitonic merge requires.
@@ -151,7 +196,10 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1):
 
         if events:  # Only add traces that have events
             cases.append({'id': case_id, 'events': events})
-        
+
+    if use_handovers:
+        _save_fingerprint_map(party_index, fp_map)
+
     return cases
 
 def encode_and_save(cases_list):
@@ -263,8 +311,8 @@ if __name__ == "__main__":
 
     granularity = GRANULARITY_MS[args.timestamp_granularity]
     cases_list = []
-    for path in args.logs:
-        cases = parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=granularity)
+    for p, path in enumerate(args.logs):
+        cases = parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=granularity, party_index=p)
         if not cases:
             print(f"Failed to load log: {path}")
             sys.exit(1)

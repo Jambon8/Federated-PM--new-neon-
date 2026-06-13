@@ -138,7 +138,7 @@ def main():
         if is_ocel:
             cases = importer.parse_ocel(path, flatten_type=args.flatten_type, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
         else:
-            cases = importer.parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
+            cases = importer.parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity, party_index=p)
         cases_list.append(cases)
 
     if args.n_per_party_cap is not None and args.n_per_party_cap > 0:
