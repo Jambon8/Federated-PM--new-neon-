@@ -292,12 +292,13 @@ def main():
             idx = positions[k]
             ts = data[src_row][1 + k*2]
             act = data[src_row][1 + k*2 + 1]
-            if ENABLE_PARTIAL_ORDERS:
-                is_real = (ts != sint64(MAX_TIME))
-                composite = (ts << ACT_BITS) | act
-                dst_keys[idx] = is_real.if_else(composite, sint64(MAX_TIME))
-            else:
-                dst_keys[idx] = ts
+            # Composite key (ts << ACT_BITS) | act orders same-timestamp events by
+            # ascending activity code in BOTH regimes, so the reconstructed trace is
+            # deterministic and recording-order independent. The partial-order
+            # concurrency marker (extract_activities) is the only PO-specific addition.
+            is_real = (ts != sint64(MAX_TIME))
+            composite = (ts << ACT_BITS) | act
+            dst_keys[idx] = is_real.if_else(composite, sint64(MAX_TIME))
             dst_ts[idx] = ts
             dst_act[idx] = act
             dst_pad[idx] = False

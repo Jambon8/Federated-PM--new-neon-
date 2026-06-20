@@ -239,7 +239,7 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
             events = [(t, act) for (t, act, _h) in raw_events]
 
         # Sort events by (timestamp, activity_name) to ensure local sorted invariant.
-        # Tiebreaking by activity_name makes the composite key (ts << 20 | act_id)
+        # Tiebreaking by activity_name makes the composite key (ts << 17 | act_id)
         # monotonic within each party, which the bitonic merge requires.
         events.sort(key=lambda x: (x[0], x[1]))
 
