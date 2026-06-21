@@ -638,7 +638,7 @@ def main():
     SHUF_BITS = 40
     REL_COLS = 3 + FULL_LEN  # [key, keep, masked_count, payload...]
     release_m = sint64.Matrix(TOTAL_N, REL_COLS)
-    @for_range_opt_multithread(N_THREADS, TOTAL_N)
+    @for_range_opt(TOTAL_N)
     def _(i):
         keep_bit = (restore[i][1] != 0)
         rand_key = sint64.bit_compose(
