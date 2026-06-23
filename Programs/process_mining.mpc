@@ -578,17 +578,19 @@ def main():
     # Must use MemValue to pass to threads
     threshold_mem = MemValue(threshold_sb)
     
-    # --- Compact-and-shuffle reveal (both release regimes) ---
-    # Revealing the hash-sorted keep mask directly would disclose
-    # data-dependent values beyond the released multiset: gaps between kept
-    # positions in the sorted order give exact true bucket counts (un-noised
-    # even under DP). Instead the release (A) computes keep + masked count per
-    # hash-sorted row (payload already co-located by the Step-5 wide sort),
-    # (B) keys every row with (notkeep || random bits) and sorts once,
-    # compacting kept rows to the front in uniformly random relative order,
-    # and (C) reveals only masked counts and masked payloads. The transcript
-    # then discloses exactly the released (variant, count) multiset in both
-    # release regimes.
+    # --- Reveal ---
+    # The reveal must not let row positions disclose values beyond the released
+    # multiset. The only positional leak comes from SUPPRESSED variants: in
+    # hash-sorted order a suppressed bucket is a run of masked rows whose length
+    # equals its true (un-released) count, leaked by the gap to the next kept
+    # row. Suppression occurs only under THRESHOLD>1 (k-anon filtering) or DP
+    # (noise can push a count below the cutoff). Step A computes keep + masked
+    # count per hash-sorted row (payload co-located by the Step-5 wide sort);
+    # Step B+C then either reveal in place (threshold=1, no DP: nothing is
+    # suppressed, so the hash-sorted order is a public function of the released
+    # multiset) or compact-and-shuffle to hide positions when suppression can
+    # occur. Either way the transcript discloses exactly the released
+    # (variant, count) multiset.
 
     others_counts = Array(TOTAL_N, sint64)
     others_counts.assign_all(0)
@@ -627,39 +629,57 @@ def main():
         keep_arr[i] = keep.if_else(sint64(1), sint64(0))
         count_arr[i] = c_counts[i] * keep
 
-    # Step B: shuffle-sort the release matrix. Kept rows draw keys in
-    # [0, 2^SHUF_BITS), suppressed rows in [2^SHUF_BITS, 2^(SHUF_BITS+1)),
-    # so kept rows sort to the front; the random bits make the relative
-    # order within each class uniform (collision prob ~ T^2 / 2^41).
-    # Payloads come straight from the hash-sorted merged_data at the same i.
-    SHUF_BITS = 40
-    REL_COLS = 3 + FULL_LEN  # [key, keep, masked_count, payload...]
-    release_m = sint64.Matrix(TOTAL_N, REL_COLS)
-    @for_range_opt(TOTAL_N)
-    def _(i):
-        keep_bit = (keep_arr[i] != 0)
-        rand_key = sint64.bit_compose(
-            [sbit.get_random_bit() for _ in range(SHUF_BITS)])
-        release_m[i][0] = keep_bit.if_else(
-            sint64(0), sint64(2**SHUF_BITS)) ^ rand_key
-        release_m[i][1] = keep_arr[i]
-        release_m[i][2] = count_arr[i]
-        payload_mask = keep_bit.if_else(sint64(-1), sint64(0))
-        for k in range(FULL_LEN):
-            release_m[i][3 + k] = merged_data[i][2 + k] & payload_mask
-    release_m.sort(key_indices=[0], n_threads=N_THREADS)
-
-    # Step C: reveal keep flags (a public-length prefix of ones), masked
-    # counts, and masked payloads. Positions now carry no information.
+    # Step B+C: materialize the (keep, count, payload) reveal arrays. Masked
+    # (non-kept) rows always reveal 0.
     rel_keep = Array(TOTAL_N, sint64)
     rel_counts = Array(TOTAL_N, sint64)
     flat_traces = Array(TOTAL_N * FULL_LEN, sint64)
-    @for_range_opt_multithread(N_THREADS, TOTAL_N)
-    def _(i):
-        rel_keep[i] = release_m[i][1]
-        rel_counts[i] = release_m[i][2]
-        for k in range(FULL_LEN):
-            flat_traces[i * FULL_LEN + k] = release_m[i][3 + k]
+
+    if THRESHOLD > 1 or ENABLE_DP:
+        # Suppression is possible -> hide positions with a compact-and-shuffle:
+        # key every row with (notkeep || random bits) and sort once. Kept rows
+        # draw keys in [0, 2^SHUF_BITS), suppressed rows in
+        # [2^SHUF_BITS, 2^(SHUF_BITS+1)), so kept rows compact to the front; the
+        # random bits make within-class order uniform (collision ~ T^2 / 2^41).
+        SHUF_BITS = 40
+        REL_COLS = 3 + FULL_LEN  # [key, keep, masked_count, payload...]
+        release_m = sint64.Matrix(TOTAL_N, REL_COLS)
+        @for_range_opt(TOTAL_N)
+        def _(i):
+            keep_bit = (keep_arr[i] != 0)
+            rand_key = sint64.bit_compose(
+                [sbit.get_random_bit() for _ in range(SHUF_BITS)])
+            release_m[i][0] = keep_bit.if_else(
+                sint64(0), sint64(2**SHUF_BITS)) ^ rand_key
+            release_m[i][1] = keep_arr[i]
+            release_m[i][2] = count_arr[i]
+            payload_mask = keep_bit.if_else(sint64(-1), sint64(0))
+            for k in range(FULL_LEN):
+                release_m[i][3 + k] = merged_data[i][2 + k] & payload_mask
+        release_m.sort(key_indices=[0], n_threads=N_THREADS)
+        @for_range_opt_multithread(N_THREADS, TOTAL_N)
+        def _(i):
+            rel_keep[i] = release_m[i][1]
+            rel_counts[i] = release_m[i][2]
+            for k in range(FULL_LEN):
+                flat_traces[i * FULL_LEN + k] = release_m[i][3 + k]
+    else:
+        # THRESHOLD==1 and no DP: nothing is suppressed (every valid bucket is
+        # released), so each gap between kept rows in hash-sorted order is just
+        # a run of duplicates of the preceding variant (length = its released
+        # count - 1) or the fixed padding block (size = TOTAL_N - sum of
+        # released counts). Both are public functions of the released multiset
+        # (the hash is public), so the in-place hash-sorted reveal is
+        # simulatable and no shuffle is needed.
+        @for_range_opt_multithread(N_THREADS, TOTAL_N)
+        def _(i):
+            keep_bit = (keep_arr[i] != 0)
+            rel_keep[i] = keep_arr[i]
+            rel_counts[i] = count_arr[i]
+            payload_mask = keep_bit.if_else(sint64(-1), sint64(0))
+            for k in range(FULL_LEN):
+                flat_traces[i * FULL_LEN + k] = merged_data[i][2 + k] & payload_mask
+
     mask_list = rel_keep.reveal()
     counts_list = rel_counts.reveal()
     traces_list = flat_traces.reveal()
