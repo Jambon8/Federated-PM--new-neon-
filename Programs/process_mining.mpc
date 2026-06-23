@@ -447,30 +447,25 @@ def main():
         merged_data[i][0] = h
     stop_timer(NEON_TIMER_HASH)
 
-    # --- Step 5: Secure Grouping (Narrow-Key Sort Optimization) ---
-    print_ln("--- [TIMESTAMP] Starting Step 5: Grouping (Narrow-Key Sort) ---")
+    # --- Step 5: Secure Grouping (Wide Sort) ---
+    print_ln("--- [TIMESTAMP] Starting Step 5: Grouping (Wide Sort) ---")
     #neon_timer: Grouping NEON_TIMER_GROUP
     start_timer(NEON_TIMER_GROUP)
-    
-    # OPTIMIZATION: Sort a narrow [hash, orig_index, valid_bit] matrix (3 cols)
-    # instead of full merged_data (2 + FULL_LEN cols).
-    # Every compare-and-swap now moves 3 values instead of 2+FULL_LEN.
-    # We include valid_bit so the output pass can determine keep without
-    # needing a secret-indexed lookup into merged_data.
+
+    # Sort the full merged_data ([hash, valid_bit, payload...]) by hash so each
+    # group representative carries its own payload in sorted order. The output
+    # phase then reads count and payload at the same index, removing the restore
+    # sort that previously re-married them (counts are produced in hash order;
+    # payloads used to remain in input order). Sort wall-clock is set by network
+    # rounds (sort depth), which is width-independent, so the wide sort costs
+    # ~the same time as the former narrow sort while deleting a later sort.
     #neon_timer: Grouping Setup NEON_TIMER_GROUP_SETUP
     start_timer(NEON_TIMER_GROUP_SETUP)
-    narrow_keys = sint64.Matrix(TOTAL_N, 3)  # [hash, orig_index, valid_bit]
-    
-    @for_range_opt_multithread(N_THREADS, TOTAL_N)
-    def _(i):
-        narrow_keys[i][0] = merged_data[i][0]  # hash
-        narrow_keys[i][1] = sint64(i)           # original index
-        narrow_keys[i][2] = merged_data[i][1]   # valid_bit (match flag)
     stop_timer(NEON_TIMER_GROUP_SETUP)
-    
+
     #neon_timer: Grouping Sort NEON_TIMER_GROUP_SORT
     start_timer(NEON_TIMER_GROUP_SORT)
-    narrow_keys.sort(key_indices=[0], n_threads=N_THREADS)
+    merged_data.sort(key_indices=[0], n_threads=N_THREADS)
     stop_timer(NEON_TIMER_GROUP_SORT)
     
     #neon_timer: Grouping Count NEON_TIMER_GROUP_COUNT
@@ -481,11 +476,11 @@ def main():
     is_last.assign_all(0)
     current_group_count = MemValue(sint64(1))
     
-    # Serial counting pass — reads hashes from the narrow sorted array
+    # Serial counting pass — reads hashes from the hash-sorted merged_data
     @for_range_opt(TOTAL_N - 1)
     def _(i):
-        h_curr = narrow_keys[i][0]
-        h_next = narrow_keys[i+1][0]
+        h_curr = merged_data[i][0]
+        h_next = merged_data[i+1][0]
         
         is_equal = (h_curr == h_next)
         
@@ -584,30 +579,33 @@ def main():
     threshold_mem = MemValue(threshold_sb)
     
     # --- Compact-and-shuffle reveal (both release regimes) ---
-    # Revealing the hash-sorted keep mask and the original-index pointers
-    # would disclose data-dependent values beyond the released multiset:
-    # gaps between kept positions in the sorted order give exact true
-    # bucket counts (un-noised even under DP), and a pointer gives the
-    # representative's rank in the case-sorted merge. Instead the release
-    # (A) restores original row order so counts align with payload rows,
+    # Revealing the hash-sorted keep mask directly would disclose
+    # data-dependent values beyond the released multiset: gaps between kept
+    # positions in the sorted order give exact true bucket counts (un-noised
+    # even under DP). Instead the release (A) computes keep + masked count per
+    # hash-sorted row (payload already co-located by the Step-5 wide sort),
     # (B) keys every row with (notkeep || random bits) and sorts once,
-    # compacting kept rows to the front in uniformly random relative
-    # order, and (C) reveals only masked counts and masked payloads.
-    # The transcript then discloses exactly the released (variant, count)
-    # multiset in both release regimes.
+    # compacting kept rows to the front in uniformly random relative order,
+    # and (C) reveals only masked counts and masked payloads. The transcript
+    # then discloses exactly the released (variant, count) multiset in both
+    # release regimes.
 
     others_counts = Array(TOTAL_N, sint64)
     others_counts.assign_all(0)
+    keep_arr = Array(TOTAL_N, sint64)
+    count_arr = Array(TOTAL_N, sint64)
 
-    # Step A: carry [orig_idx, keep, masked_count] back to original order.
+    # Step A: compute keep + masked count per hash-sorted row (parallel; this
+    # loop draws no fresh randomness, so it is safe across multithreaded tapes).
+    # Counts and payloads are both hash-sorted after Step 5, so no restore sort
+    # is needed to align them.
     # The THRESHOLD comparison is only compiled when it can matter — when
     # THRESHOLD>1 (filtering) or under DP (noise can push counts below).
     # When THRESHOLD==1 and DP is off, c_counts[i] is always >= 1 at
     # valid-last positions, so count_ok is tautological and pruned.
-    restore = sint64.Matrix(TOTAL_N, 3)
     @for_range_opt_multithread(N_THREADS, TOTAL_N)
     def _(i):
-        valid_bit = narrow_keys[i][2]
+        valid_bit = merged_data[i][1]
         is_valid_trace = (valid_bit == 0)
         last_bit = (is_last[i] != 0)
         valid_last = is_valid_trace & last_bit
@@ -626,27 +624,26 @@ def main():
             keep = valid_last
             # K_ANON is a no-op when threshold=1 and no DP: nothing falls below.
 
-        restore[i][0] = narrow_keys[i][1]
-        restore[i][1] = keep.if_else(sint64(1), sint64(0))
-        restore[i][2] = c_counts[i] * keep
-    restore.sort(key_indices=[0], n_threads=N_THREADS)
+        keep_arr[i] = keep.if_else(sint64(1), sint64(0))
+        count_arr[i] = c_counts[i] * keep
 
     # Step B: shuffle-sort the release matrix. Kept rows draw keys in
     # [0, 2^SHUF_BITS), suppressed rows in [2^SHUF_BITS, 2^(SHUF_BITS+1)),
     # so kept rows sort to the front; the random bits make the relative
     # order within each class uniform (collision prob ~ T^2 / 2^41).
+    # Payloads come straight from the hash-sorted merged_data at the same i.
     SHUF_BITS = 40
     REL_COLS = 3 + FULL_LEN  # [key, keep, masked_count, payload...]
     release_m = sint64.Matrix(TOTAL_N, REL_COLS)
     @for_range_opt(TOTAL_N)
     def _(i):
-        keep_bit = (restore[i][1] != 0)
+        keep_bit = (keep_arr[i] != 0)
         rand_key = sint64.bit_compose(
             [sbit.get_random_bit() for _ in range(SHUF_BITS)])
         release_m[i][0] = keep_bit.if_else(
             sint64(0), sint64(2**SHUF_BITS)) ^ rand_key
-        release_m[i][1] = restore[i][1]
-        release_m[i][2] = restore[i][2]
+        release_m[i][1] = keep_arr[i]
+        release_m[i][2] = count_arr[i]
         payload_mask = keep_bit.if_else(sint64(-1), sint64(0))
         for k in range(FULL_LEN):
             release_m[i][3 + k] = merged_data[i][2 + k] & payload_mask
