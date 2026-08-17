@@ -1,73 +1,96 @@
-"""Compute dataset stats for the Chapter 6 dataset table.
+"""Compute the effective two-party input statistics used in Chapter 6.
 
-For every log used in E1..E10, emit (name, cases, events, activities, variants).
-Result is the source-of-truth for tab:datasets — pin the CSV at chapter freeze.
+The experiment importer discards XES traces with no party-local event.  The
+statistics therefore use ``import_xes.parse_xes`` instead of counting raw
+``<trace>`` elements, so ``N_per_party`` matches the encoded matrix cap.
+
+Usage:
+    python3 eval/plotting/dataset_stats.py
 """
+
+from __future__ import annotations
 
 import csv
 import os
 import sys
 
-import pm4py
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-OUT_DIR = os.path.join(ROOT, "eval_results", "stage_breakdown")  # share with other artefacts
+sys.path.insert(0, ROOT)
 
-# Use the OrgA halves as canonical (the full log is the union, but our N=2 split
-# is also a fair representation since the parties carry the same cases).
-DATASETS = [
-    ("bpi13_incidents",   "data/Master_Input/OrgA/BPI_Challenge_2013_incidents.xes.gz"),
-    ("bpi13_open",        "data/Master_Input/OrgA/BPI_Challenge_2013_open_problems.xes.gz"),
-    ("bpi13_closed",      "data/Master_Input/OrgA/BPI_Challenge_2013_closed_problems.xes.gz"),
-    ("sepsis",            "data/Master_Input/OrgA/Sepsis_Cases_OrgA.xes.gz"),
-    ("bpi12",             "data/Master_Input/OrgA/BPI_Challenge_2012.xes.gz"),
-    ("hospital",          "data/Master_Input/OrgA/Hospital_log.xes.gz"),
-    ("bpi17_offer",       "data/Master_Input/OrgA/BPIChallenge2017-Offerlog.xes"),
-    ("requestforpayment", "data/Master_Input/OrgA/RequestForPayment_OrgA.xes.gz"),
-    ("domestic_decl",     "data/Master_Input/OrgA/DomesticDeclarations_OrgA.xes.gz"),
-    ("international_decl","data/Master_Input/OrgA/InternationalDeclarations_OrgA.xes.gz"),
-    ("permit",            "data/Master_Input/OrgA/PermitLog_OrgA.xes.gz"),
-]
+import import_xes  # noqa: E402
+from eval.thesis_experiments import N2_DATASETS  # noqa: E402
 
 
-def stats(name, path):
-    if not os.path.isfile(path):
-        return {"dataset": name, "path": path, "cases": None, "events": None,
-                "activities": None, "variants": None, "error": "missing"}
-    try:
-        log = pm4py.read_xes(path)
-        cases = log["case:concept:name"].nunique()
-        events = len(log)
-        activities = log["concept:name"].nunique()
-        variants = len(pm4py.get_variants(log))
-        return {"dataset": name, "path": path, "cases": cases, "events": events,
-                "activities": activities, "variants": variants, "error": None}
-    except Exception as ex:
-        return {"dataset": name, "path": path, "cases": None, "events": None,
-                "activities": None, "variants": None, "error": str(ex)}
+OUTPUT = os.path.join(ROOT, "eval_results", "dataset_stats.csv")
+DATASETS = (
+    "bpi13_incidents",
+    "bpi13_open",
+    "bpi13_closed",
+    "bpi12",
+    "bpi17_offer",
+    "sepsis",
+    "hospital",
+    "requestforpayment",
+    "domestic_decl",
+    "international_decl",
+    "permit",
+)
+FIELDS = (
+    "dataset",
+    "cases_A",
+    "cases_B",
+    "cases_union",
+    "max_trace_A",
+    "max_trace_B",
+    "partial_len",
+    "events",
+    "activities",
+    "N_per_party",
+)
 
 
-def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
-    rows = []
-    print(f"{'dataset':<20} {'cases':>10} {'events':>10} {'activities':>11} {'variants':>10}")
-    for name, rel in DATASETS:
-        path = os.path.join(ROOT, rel)
-        row = stats(name, path)
-        rows.append(row)
-        if row["error"]:
-            print(f"{name:<20} ERROR: {row['error']}")
-        else:
-            print(f"{name:<20} {row['cases']:>10} {row['events']:>10} "
-                  f"{row['activities']:>11} {row['variants']:>10}")
-    out = os.path.join(OUT_DIR, "dataset_stats.csv")
-    with open(out, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["dataset", "path", "cases", "events",
-                                          "activities", "variants", "error"])
-        w.writeheader()
-        for r in rows:
-            w.writerow(r)
-    print(f"\nWrote {out}")
+def _stats(dataset: str) -> dict[str, int | str]:
+    cases_a = import_xes.parse_xes(N2_DATASETS[dataset][0])
+    cases_b = import_xes.parse_xes(N2_DATASETS[dataset][1])
+    ids_a = {case["id"] for case in cases_a}
+    ids_b = {case["id"] for case in cases_b}
+    max_a = max((len(case["events"]) for case in cases_a), default=0)
+    max_b = max((len(case["events"]) for case in cases_b), default=0)
+    activities = {
+        activity
+        for case in cases_a + cases_b
+        for _, activity in case["events"]
+    }
+    return {
+        "dataset": dataset,
+        "cases_A": len(cases_a),
+        "cases_B": len(cases_b),
+        "cases_union": len(ids_a | ids_b),
+        "max_trace_A": max_a,
+        "max_trace_B": max_b,
+        "partial_len": max(max_a, max_b),
+        "events": sum(len(case["events"]) for case in cases_a + cases_b),
+        "activities": len(activities),
+        "N_per_party": max(len(cases_a), len(cases_b)),
+    }
+
+
+def main() -> None:
+    rows = [_stats(dataset) for dataset in DATASETS]
+    with open(OUTPUT, "w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"wrote {OUTPUT}")
+    for row in rows:
+        print(
+            row["dataset"],
+            f"cases={row['cases_A']}/{row['cases_B']}",
+            f"partial_len={row['partial_len']}",
+            f"events={row['events']}",
+            f"activities={row['activities']}",
+        )
 
 
 if __name__ == "__main__":

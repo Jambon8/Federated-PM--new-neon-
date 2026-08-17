@@ -26,8 +26,17 @@ from datetime import datetime
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
-RESULTS_ROOT = os.path.join(PROJECT_ROOT, "eval_results")
+RESULTS_ROOT = os.environ.get("NEON_RESULTS_ROOT", os.path.join(PROJECT_ROOT, "eval_results"))
 RUN_CMD = ["python3", "-u", "examples/run_process_mining.py"]
+
+# Results written before this UTC instant predate the 2026-06-23 Stage-6 reveal
+# changes (commits 845c1d2 at 09:52Z and f6e86f7 at 10:09Z); their timings are
+# stale and are dropped from aggregation. The boundary is set just after the
+# later commit: every run from 10:10Z onward (including the morning e7 local
+# rerun) used the new binary. e8b is exempt — its DP variant counts are
+# reveal-independent. Override via NEON_NEW_CODE_CUTOFF if a later change needs
+# a new boundary.
+NEW_CODE_CUTOFF = os.environ.get("NEON_NEW_CODE_CUTOFF", "2026-06-23T10:10:00Z")
 
 # Override via env to run on a cluster with a different data layout (e.g. CLAIX:
 #   export NEON_DATA_ROOT=$HOME).
@@ -104,12 +113,11 @@ N_WAY_DATASETS = {
 def _runs_e1_correctness():
     """E1: exact-match vs centralized baseline. 1 run per dataset (deterministic).
 
-    Expanded from 3 to 8 logs to give correctness coverage comparable to
-    Rennert's DFG paper (10-log mega-table). Cheap: one rep per log, no MPC
-    cost beyond a single pipeline run."""
+    Covers every dataset used anywhere in the Chapter 6 experiment registry.
+    Cheap: one rep per log, no MPC cost beyond a single pipeline run."""
     out = []
-    datasets = ("bpi13_incidents", "sepsis", "requestforpayment",
-                "bpi17_offer", "bpi12", "domestic_decl", "hospital", "permit")
+    datasets = ("bpi13_incidents", "bpi13_open", "bpi13_closed", "sepsis", "requestforpayment",
+                "bpi17_offer", "bpi12", "domestic_decl", "international_decl", "hospital", "permit")
     for dset in datasets:
         logs = list(N2_DATASETS[dset])
         rid = f"e1__{dset}__default__rep0"
@@ -119,16 +127,33 @@ def _runs_e1_correctness():
 
 
 def _runs_e2_performance(reps=5):
-    """E2 baseline performance — same 8 datasets as E1 for one-to-one
+    """E2 baseline performance — same 11 datasets as E1 for one-to-one
     correctness-vs-performance row alignment in the chapter's headline table."""
     out = []
-    datasets = ("bpi13_incidents", "sepsis", "requestforpayment",
-                "bpi17_offer", "bpi12", "domestic_decl", "hospital", "permit")
+    datasets = ("bpi13_incidents", "bpi13_open", "bpi13_closed", "sepsis", "requestforpayment",
+                "bpi17_offer", "bpi12", "domestic_decl", "international_decl", "hospital", "permit")
     for dset, rep in itertools.product(datasets, range(reps)):
         logs = list(N2_DATASETS[dset])
         rid = f"e2__{dset}__default__rep{rep}"
         out.append((rid, ["--threshold", "1", "--k-anon", "0"], 2, logs,
                     {"experiment": "e2_performance", "dataset": dset, "rep": rep}))
+    return out
+
+
+def _runs_e2_threads(reps=5):
+    """Thread-scaling extension to E2: the E2 datasets re-run with explicit
+    --threads in {16, 32, 64} to measure multithreading speedup. --threads is
+    passed explicitly so build_command does not override it with the cluster
+    default; the program is recompiled per thread count (N_THREADS enters the
+    .mpc substitution, so each thread count is a distinct compile)."""
+    out = []
+    datasets = ("bpi13_incidents", "bpi13_open", "bpi13_closed", "sepsis", "requestforpayment",
+                "bpi17_offer", "bpi12", "domestic_decl", "international_decl", "hospital", "permit")
+    for dset, th, rep in itertools.product(datasets, (16, 32, 64), range(reps)):
+        logs = list(N2_DATASETS[dset])
+        rid = f"e2t__{dset}__t{th}__rep{rep}"
+        out.append((rid, ["--threshold", "1", "--k-anon", "0", "--threads", str(th)], 2, logs,
+                    {"experiment": "e2t_threads", "dataset": dset, "threads": th, "rep": rep}))
     return out
 
 
@@ -149,6 +174,61 @@ def _runs_e3_scaling_input(reps=3):
         out.append((rid, args, 2, logs,
                     {"experiment": "e3_scaling_input", "dataset": dset,
                      "n_per_party_cap": cap, "seed": seed, "rep": rep}))
+    return out
+
+
+def _runs_e3_grid(reps=3):
+    """E3 replacement: controlled 2D sweep of the two encoded input dimensions.
+
+    Case count N and row width P vary independently on a geometric grid.
+    --n-per-party-cap fixes N (seed 42 for every cell: with pinned dimensions
+    the circuit is identical across repetitions, so repetitions measure
+    execution variance only); --force-partial-len truncates longer traces and
+    pads the encoding so every cell's circuit has width exactly P. The
+    pipeline's cost is data-oblivious, so the dimensions determine cost;
+    truncation only pins the width and does not affect cost validity.
+    bpi17_offer is excluded (max trace length 5 cannot sweep P)."""
+    out = []
+    datasets = ("sepsis", "bpi13_incidents")
+    n_cells = (10, 50, 200, 1000)
+    p_cells = (8, 16, 32, 64)
+    for dset, n, p, rep in itertools.product(datasets, n_cells, p_cells, range(reps)):
+        logs = list(N2_DATASETS[dset])
+        args = ["--threshold", "1", "--k-anon", "0",
+                "--n-per-party-cap", str(n), "--seed", "42",
+                "--force-partial-len", str(p)]
+        rid = f"e3g__{dset}__n{n}__p{p}__rep{rep}"
+        out.append((rid, args, 2, logs,
+                    {"experiment": "e3_grid", "dataset": dset,
+                     "n_per_party_cap": n, "partial_len": p, "seed": 42, "rep": rep}))
+    return out
+
+
+def _runs_e4b_scaling_n(reps=3):
+    """E4b: multiparty scaling sweep on the e4b inputs (generate_e4b_splits.py).
+
+    Every cell holds the same 500 joint cases at 100% overlap with the row
+    width pinned to 20 via --force-partial-len as n and the total row count
+    n*C increase. The registry retains supplementary two-party diagnostic
+    cells whose total row count matches the corresponding n-party cell."""
+    C = 500
+    out = []
+    datasets = ("sepsis", "bpi13_incidents")
+    args = ["--threshold", "1", "--k-anon", "0", "--force-partial-len", "20"]
+    for dset, n, rep in itertools.product(datasets, (2, 3, 4, 5), range(reps)):
+        logs = [f"{DATA_ROOT}/e4b/{dset}/n{n}/party_{i}.xes" for i in range(n)]
+        rid = f"e4b__{dset}__N{n}__rep{rep}"
+        out.append((rid, list(args), n, logs,
+                    {"experiment": "e4b_scaling_n", "dataset": dset, "n_parties": n,
+                     "c_cases": C, "partial_len": 20, "control": False, "rep": rep}))
+    for dset, n, rep in itertools.product(datasets, (3, 4, 5), range(reps)):
+        m = n * C // 2
+        logs = [f"{DATA_ROOT}/e4b/{dset}/ctrl{m}/party_{i}.xes" for i in range(2)]
+        rid = f"e4b__{dset}__ctrlN{n}__rep{rep}"
+        out.append((rid, list(args), 2, logs,
+                    {"experiment": "e4b_scaling_n", "dataset": dset, "n_parties": 2,
+                     "matched_n": n, "cases_per_party": m, "partial_len": 20,
+                     "control": True, "rep": rep}))
     return out
 
 
@@ -323,8 +403,11 @@ def _runs_e8b_dp_delta(reps=5):
 EXPERIMENTS = {
     "e1": _runs_e1_correctness,
     "e2": _runs_e2_performance,
-    "e3": _runs_e3_scaling_input,
+    "e2t": _runs_e2_threads,
+    "e3": _runs_e3_scaling_input,   # superseded by e3g; kept for provenance of stored records
+    "e3g": _runs_e3_grid,
     "e4": _runs_e4_scaling_n,
+    "e4b": _runs_e4b_scaling_n,
     "e5": _runs_e5_handovers,
     "e6": _runs_e6_partial_orders,
     "e7": _runs_e7_network,
@@ -357,6 +440,26 @@ _OTHERS_RE  = re.compile(r"Others count \(below threshold\):\s*(\d+)")
 _DP_RE      = re.compile(r"DP_APPLIED Epsilon:(\d+)/(\d+)(?: K:(\d+))?")
 
 
+def _disjoint_total_rounds(timers):
+    """Sum a non-overlapping set of MP-SPDZ stage timers.
+
+    Timer 5 encloses the grouping sub-timers 6--8, so summing every timer
+    double-counts that stage.  Prefer the outer grouping timer when present;
+    retain the sub-timer fallback for older outputs without timer 5.
+    """
+    normalized = {int(timer_id): timer for timer_id, timer in timers.items()}
+    total = sum(normalized[timer_id]["rounds"]
+                for timer_id in (2, 3, 4, 9, 10)
+                if timer_id in normalized)
+    if 5 in normalized:
+        total += normalized[5]["rounds"]
+    else:
+        total += sum(normalized[timer_id]["rounds"]
+                     for timer_id in (6, 7, 8)
+                     if timer_id in normalized)
+    return total
+
+
 def parse_run_output(text):
     """Extract metrics + variant set from a single MPC run's combined stdout/stderr."""
     metrics = {}
@@ -367,7 +470,7 @@ def parse_run_output(text):
                        "rounds": int(m.group(4))}
     if timers:
         metrics["timers"] = timers
-        metrics["total_rounds"] = sum(t["rounds"] for t in timers.values())
+        metrics["total_rounds"] = _disjoint_total_rounds(timers)
     for r, key in [(_TIME_RE, "total_runtime_s"),
                    (_GLOBAL_RE, "global_data_sent_mb"),
                    (_PARTY0_RE, "data_sent_party0_mb")]:
@@ -461,6 +564,7 @@ def run_one(run_id, write_results=True):
     }
     if proc.returncode != 0:
         record["stderr_tail"] = proc.stderr[-2000:]
+        record["stdout_tail"] = proc.stdout[-6000:]
 
     # Snapshot Player-Data/activity_map.json so variant IDs can be resolved later.
     amap_path = os.path.join(PROJECT_ROOT, "Player-Data", "activity_map.json")
@@ -498,13 +602,27 @@ def aggregate():
             continue
         if not re.match(r"e\d+[a-z]*_", exp):
             continue
+        if "_OLD_" in exp:
+            continue
         rows = []
+        dropped = 0
         for fn in sorted(os.listdir(exp_dir)):
             if not fn.endswith(".json"):
                 continue
             with open(os.path.join(exp_dir, fn)) as f:
                 rec = json.load(f)
             if "run_id" not in rec:
+                continue
+            metrics = rec.get("metrics", {})
+            # Drop failed runs and pre-change (old-code) rows so stale timings do
+            # not pollute the aggregate. e8b is exempt: its DP variant counts are
+            # reveal-independent, so its pre-change samples remain valid and keep
+            # the (eps, delta) grid complete.
+            if metrics.get("return_code") != 0:
+                dropped += 1
+                continue
+            if not exp.startswith("e8b") and metrics.get("timestamp", "") < NEW_CODE_CUTOFF:
+                dropped += 1
                 continue
             row = {"run_id": rec["run_id"], **rec.get("meta", {}),
                    "n_parties": rec.get("n_parties"),
@@ -513,7 +631,11 @@ def aggregate():
                    "runtime_s": rec["metrics"].get("total_runtime_s"),
                    "global_data_mb": rec["metrics"].get("global_data_sent_mb"),
                    "party0_data_mb": rec["metrics"].get("data_sent_party0_mb"),
-                   "total_rounds": rec["metrics"].get("total_rounds"),
+                   # Recompute from stored timer breakdowns so legacy records
+                   # produced before the nested-timer fix aggregate correctly.
+                   "total_rounds": (_disjoint_total_rounds(metrics["timers"])
+                                    if metrics.get("timers")
+                                    else metrics.get("total_rounds")),
                    "variants_released": rec["metrics"].get("variants_released"),
                    "others_below_threshold": rec["metrics"].get("others_below_threshold")}
             rows.append(row)
@@ -529,7 +651,7 @@ def aggregate():
             for r in rows:
                 w.writerow(r)
         summary[exp] = (len(rows), csv_path)
-        print(f"{exp}: {len(rows)} runs -> {csv_path}")
+        print(f"{exp}: {len(rows)} runs (dropped {dropped} old/failed) -> {csv_path}")
     return summary
 
 

@@ -48,23 +48,10 @@ data/
 /*.synctex.gz
 /*.toc
 
-# Evaluation
-eval/*
-!eval/thesis_experiments.py
-!eval/claix_submit.sh
-!eval/claix_setup.sh
-!eval/claix_submit_chunks.sh
-!eval/claix_precompile.sh
-!eval/claix_precompile_array.sh
-!eval/precompile_all.py
-!eval/run_on_hpc.sh
-!eval/run_e7_local.sh
-!eval/plotting/
-!eval/plotting/plot_stage_breakdown.py
-!eval/plotting/e6_variant_diff.py
-!eval/plotting/e11_pm_quality.py
-!eval/plotting/style.py
+# Evaluation — the harness is tracked; measurements and generated
+# command lists are not. Results are written to eval_results/.
 eval_results/
+eval/commands*.txt
 
 # Presentations
 presentation/

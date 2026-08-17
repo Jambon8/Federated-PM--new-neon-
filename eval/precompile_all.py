@@ -21,7 +21,7 @@ from typing import List, Tuple
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from eval.thesis_experiments import all_runs, build_command  # noqa: E402
+from eval.thesis_experiments import EXPERIMENTS, all_runs, build_command  # noqa: E402
 
 NON_COMPILE_FLAGS = {"--threads", "--mode", "--network", "--seed"}
 
@@ -46,10 +46,10 @@ def compile_key(mpc_args: List[str], n_parties: int,
     return (n_parties, tuple(log_paths), tuple(filtered))
 
 
-def enumerate_unique():
+def enumerate_unique(only=None):
     """Return list of (rid, mpc_args, n_parties, log_paths) for each unique compile config."""
     seen = {}
-    for rid, mpc_args, n_parties, log_paths, meta in all_runs():
+    for rid, mpc_args, n_parties, log_paths, meta in all_runs(only=only):
         k = compile_key(mpc_args, n_parties, log_paths)
         if k not in seen:
             seen[k] = (rid, mpc_args, n_parties, log_paths)
@@ -90,11 +90,13 @@ def main():
                     help="Compile only the 0-indexed config N and exit. Used by SLURM array tasks.")
     ap.add_argument("--start", type=int, default=0,
                     help="0-indexed starting position (for sequential resume).")
+    ap.add_argument("--experiment", choices=sorted(EXPERIMENTS),
+                    help="Restrict enumeration to one experiment family.")
     args = ap.parse_args()
 
-    unique = enumerate_unique()
+    unique = enumerate_unique(only=args.experiment)
     print(f"Found {len(unique)} unique compile configurations "
-          f"across {sum(1 for _ in all_runs())} total runs.\n")
+          f"across {sum(1 for _ in all_runs(only=args.experiment))} total runs.\n")
 
     if args.dry_run:
         for i, (rid, mpc_args, n_parties, log_paths) in enumerate(unique):
