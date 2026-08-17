@@ -55,5 +55,11 @@ data/
 eval_results/
 eval/commands*.txt
 
+# Cluster orchestration. The published harness targets local execution;
+# the SLURM/CLAIX wrappers stay local as a provenance record.
+eval/claix_*.sh
+eval/cluster_*
+eval/run_on_hpc.sh
+
 # Presentations
 presentation/
