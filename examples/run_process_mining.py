@@ -77,8 +77,6 @@ def main():
     parser.add_argument("--handover-activities", type=str, default=None,
                         help="Path to the global handover list H (one activity per line), applied identically by every party. "
                              "With --use-handovers, defaults to the union of activities flagged in the logs.")
-    parser.add_argument("--is-ocel", action="store_true", help="Force OCEL processing (Approach 1)")
-    parser.add_argument("--flatten-type", type=str, default="Container", help="Object type to flatten OCEL log on")
     parser.add_argument("--partial-orders", type=int, default=0, help="Enable partial orders for concurrent events (0/1, default: 0)")
     parser.add_argument("--delta", type=_parse_delta, default='0',
                         help="Concurrency time window (default: 0 = exact timestamp equality, cheapest). Accepts: 0, 500ms, 10s, 1m, 2h")
@@ -117,9 +115,8 @@ def main():
         sys.exit(1)
 
     # --- 1. Generate Inputs ---
-    is_ocel = args.is_ocel or log_paths[0].lower().endswith(".json")
-    script_name = "import_ocel.py" if is_ocel else "import_xes.py"
-    module_name = "import_ocel" if is_ocel else "import_xes"
+    script_name = "import_xes.py"
+    module_name = "import_xes"
     print(f"--- Generating Inputs with {script_name} ({n_parties} parties) ---")
 
     os.makedirs("Player-Data", exist_ok=True)
@@ -139,7 +136,7 @@ def main():
     # load a curated file or derive it as the union of activities flagged in the
     # logs; persist the resolved list for reproducibility.
     handover_set = None
-    if args.use_handovers and not is_ocel:
+    if args.use_handovers:
         if args.handover_activities:
             handover_set = importer.load_handover_list(args.handover_activities)
             print(f"Loaded global handover list H: {len(handover_set)} activities from {args.handover_activities}")
@@ -154,11 +151,8 @@ def main():
     cases_list = []
     for p, path in enumerate(log_paths):
         print(f"Reading P{p}: {path}...")
-        if is_ocel:
-            cases = importer.parse_ocel(path, flatten_type=args.flatten_type, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity)
-        else:
-            cases = importer.parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity,
-                                       party_index=p, handover_activities=handover_set)
+        cases = importer.parse_xes(path, use_handovers=args.use_handovers, timestamp_granularity=ts_granularity,
+                                   party_index=p, handover_activities=handover_set)
         cases_list.append(cases)
 
     if args.n_per_party_cap is not None and args.n_per_party_cap > 0:

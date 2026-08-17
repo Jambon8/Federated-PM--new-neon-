@@ -66,8 +66,6 @@ def run_process_mining():
     mode = data.get('mode', 'local')
     network = data.get('network', None)
     use_handovers = data.get('use_handovers', False)
-    is_ocel = data.get('is_ocel', False)
-    flatten_type = data.get('flatten_type', 'Container')
     direct = data.get('direct', True)
     partial_orders = data.get('partial_orders', False)
     delta = data.get('delta', 1)
@@ -94,11 +92,6 @@ def run_process_mining():
     
     if use_handovers:
         cmd.append("--use-handovers")
-        
-    if is_ocel:
-        cmd.append("--is-ocel")
-        if flatten_type:
-            cmd.extend(["--flatten-type", flatten_type])
         
     if not direct:
         cmd.append("--no-direct")

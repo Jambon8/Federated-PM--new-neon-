@@ -121,21 +121,6 @@
                         </div>
                     </div>
 
-                    <div class="form-group" style="grid-column: 1 / -1; margin-top: -10px;">
-                        <label style="display: flex; align-items: center; cursor: pointer;">
-                            <input type="checkbox" id="is_ocel" name="is_ocel" value="true"
-                                style="margin-right: 0.5rem; width: auto;"
-                                onchange="document.getElementById('ocel_options').style.display = this.checked ? 'block' : 'none';">
-                            <strong>Use OCEL Pipeline (.json)</strong> — Approach 1 (Flatten on Target Object)
-                        </label>
-                        <div id="ocel_options" style="display: none; margin-top: 10px; margin-left: 25px;">
-                            <label for="flatten_type">Object Type to Flatten On:</label>
-                            <input type="text" id="flatten_type" name="flatten_type" value="Container"
-                                placeholder="e.g., Container, Handling Unit"
-                                style="width: 250px; padding: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius); background-color: var(--surface);">
-                        </div>
-                    </div>
-
                     <!-- New: Mode and Network -->
                     <div class="form-group">
                         <label for="mode">Operation Mode</label>
@@ -493,8 +478,6 @@
             data.enable_dp = document.getElementById('enable_dp').checked;
             data.epsilon = parseFloat(document.getElementById('epsilon').value);
             data.dp_delta = Math.pow(10, parseFloat(document.getElementById('dp_delta').value));
-            data.is_ocel = document.getElementById('is_ocel').checked;
-            data.flatten_type = document.getElementById('flatten_type').value;
 
             try {
                 const response = await fetch('/api/run', {

@@ -2,7 +2,7 @@
 
 Secure multi-party computation of process mining over event logs from two organisations, using the [NEON](README.md) framework on top of MP-SPDZ.
 
-Two parties each hold a private event log (XES or OCEL format). The protocol jointly computes the set of common process traces and their frequencies without either party learning the other's raw data.
+Two parties each hold a private event log (XES format). The protocol jointly computes the set of common process traces and their frequencies without either party learning the other's raw data.
 
 ---
 
@@ -30,7 +30,7 @@ python3 examples/run_process_mining.py \
 
 | Flag | Default | Description |
 |---|---|---|
-| `--log-a` | *(BPI 2013 OrgA)* | Path to Organisation A's event log (`.xes`, `.xes.gz`, or `.json` for OCEL) |
+| `--log-a` | *(BPI 2013 OrgA)* | Path to Organisation A's event log (`.xes` or `.xes.gz`) |
 | `--log-b` | *(BPI 2013 OrgB)* | Path to Organisation B's event log |
 | `--threshold` | `1` | Minimum count for a trace to appear in the output |
 | `--threads` | `16` | Number of threads for the MPC computation |
@@ -41,8 +41,6 @@ python3 examples/run_process_mining.py \
 | `--compile-looping` | off | Pass `-l` to MP-SPDZ compiler — speeds up compilation of loop-heavy programs |
 | `--direct` | off | Pass `--direct` to MP-SPDZ runtime — direct party-to-party communication (faster on LAN) |
 | `--use-handovers` | off | Only include handover synchronisation events, not all events |
-| `--is-ocel` | off | Force OCEL parsing (auto-detected from `.json` extension) |
-| `--flatten-type` | `Container` | Object type to flatten an OCEL log on |
 
 ### Examples
 
@@ -64,12 +62,6 @@ python3 examples/run_process_mining.py \
   --log-b /data/OrgB/log.xes.gz \
   --mode local-virtual --network wan-fast \
   --compile-looping --direct
-
-# OCEL log
-python3 examples/run_process_mining.py \
-  --log-a /data/OrgA/ocel.json \
-  --log-b /data/OrgB/ocel.json \
-  --flatten-type Container
 ```
 
 ---
@@ -105,13 +97,7 @@ some_command | python3 decode_output.py
 
 ## Input log formats
 
-### XES / XES.GZ
-
 Standard XES event log format. Both plain `.xes` and gzip-compressed `.xes.gz` are supported.
-
-### OCEL (JSON)
-
-OCEL 2.0 JSON format. Use `--flatten-type` to choose which object type defines the cases (default: `Container`).
 
 ---
 
@@ -122,7 +108,6 @@ neon_new/
 ├── examples/run_process_mining.py   # Main entry point
 ├── Programs/process_mining.mpc      # MPC program (MP-SPDZ)
 ├── import_xes.py                    # XES log parser + input encoder
-├── import_ocel.py                   # OCEL log parser + input encoder
 ├── decode_output.py                 # CLI output decoder
 ├── app.py                           # Flask web server
 ├── api_helper.py                    # Output parsing for the web UI
