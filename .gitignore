@@ -24,9 +24,29 @@ config/debug_logging.conf
 
 MIGRATION_NOTES.md
 
-# Claude Code config
+# Agent config
 .claude/
 CLAUDE.md
+.codex/
+AGENTS.md
+.mcp.json
+
+# Thesis sources, advisor feedback, and third-party reference theses
+Thesis/
+
+# Event logs and derived party splits — obtained from the public BPI/4TU archives
+data/
+
+# Stray root-level LaTeX build artifacts from thesis compiles
+/*.aux
+/*.bbl
+/*.blg
+/*.fdb_latexmk
+/*.fls
+/*.log
+/*.out
+/*.synctex.gz
+/*.toc
 
 # Evaluation
 eval/*
