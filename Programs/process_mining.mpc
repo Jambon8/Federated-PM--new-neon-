@@ -505,20 +505,21 @@ def main():
     # "noisy count > k" (Desfontaines et al., Thm. 6); since the release test
     # below is "count >= THRESHOLD", the Python driver sets THRESHOLD = k + 1.
     if ENABLE_DP:
-        import math
+        from decimal import Decimal, ROUND_HALF_EVEN, localcontext
         print_ln("--- Adding DP Noise (epsilon=%s/%s, k=%s) ---", EPSILON_NUM, EPSILON_DEN, DP_K)
         #neon_timer: DP Noise NEON_TIMER_DP_NOISE
         start_timer(NEON_TIMER_DP_NOISE)
 
-        # Exact k-TSGD(p, k) sampling via inverse-CDF over a secret uniform.
+        # Finite-grid approximation to k-TSGD(p, k) via inverse-CDF over a
+        # secret uniform. The driver reserves (1 + exp(epsilon)) times the
+        # conservative TV bound 2k * 2^-M_BITS from the requested delta before
+        # calibrating DP_K.
         # pmf(x) = q^|x| / Z on x in [-k, k], q = e^(-epsilon) = 1 - p,
         # Z = (1 + q - 2 q^(k+1)) / (1 - q)  (Desfontaines et al., Def. 6).
         # The CDF thresholds are PUBLIC compile-time constants; only the
         # uniform draw R is secret. X = -k + #{thresholds <= R}, so the
         # sampled marginal equals the k-TSGD up to the 2^-M_BITS grid
         # (total-variation distance < 2k * 2^-M_BITS).
-        epsilon = EPSILON_NUM / EPSILON_DEN
-        q_float = math.exp(-epsilon)  # geometric ratio q = 1 - p
         M_BITS = 32  # precision of the uniform draw
         # k serves as truncation bound: noise ~ k-TSGD(p, k) in [-k, k]
         MAX_NOISE = DP_K
@@ -530,13 +531,20 @@ def main():
 
         # CDF table F(-k), F(-k+1), ..., F(k-1): 2k thresholds on the
         # 2^M_BITS grid. F(k) = 1 is omitted (R < 2^M_BITS always).
-        Z = (1.0 + q_float - 2.0 * q_float ** (MAX_NOISE + 1)) / (1.0 - q_float)
-        cdf_thresholds = []
-        acc = 0.0
-        for x in range(-MAX_NOISE, MAX_NOISE):
-            acc += (q_float ** abs(x)) / Z
-            t = int(round(acc * (2 ** M_BITS)))
-            cdf_thresholds.append(min(2 ** M_BITS - 1, max(1, t)))
+        # High-precision compile-time arithmetic makes the public table a
+        # deterministic rounding of the mathematical CDF, rather than of an
+        # intermediate binary64 approximation.
+        with localcontext() as decimal_context:
+            decimal_context.prec = 90
+            epsilon = Decimal(EPSILON_NUM) / Decimal(EPSILON_DEN)
+            q = (-epsilon).exp()  # geometric ratio q = 1 - p
+            Z = (1 + q - 2 * q ** (MAX_NOISE + 1)) / (1 - q)
+            cdf_thresholds = []
+            acc = Decimal(0)
+            for x in range(-MAX_NOISE, MAX_NOISE):
+                acc += (q ** abs(x)) / Z
+                t = int((acc * (2 ** M_BITS)).to_integral_value(rounding=ROUND_HALF_EVEN))
+                cdf_thresholds.append(min(2 ** M_BITS - 1, max(1, t)))
         print_ln("DP sampling: inverse-CDF k-TSGD (%s thresholds, %s-bit uniform)", 2 * MAX_NOISE, M_BITS)
 
         def sample_ktsgd():

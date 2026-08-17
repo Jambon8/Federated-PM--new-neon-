@@ -18,6 +18,9 @@ logger = logging.getLogger("Driver")
 
 import argparse
 import importlib.util
+from fractions import Fraction
+
+from ProgramFiles.dp_calibration import calibrate_dp, compute_dp_k
 
 _GRANULARITY_MS = {'ms': 1, 's': 1000, 'm': 60_000, 'h': 3_600_000}
 
@@ -42,21 +45,6 @@ def import_source_file(fname, modname):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
-
-def compute_dp_k(epsilon, dp_delta):
-    """Compute partition selection threshold k from (epsilon, delta).
-    Definition 5 of Rafiei et al. (ICPM 2022), based on Desfontaines et al. (2022).
-    k = ceil((1/epsilon) * ln((e^epsilon + 2*delta - 1) / (delta * (e^epsilon + 1))))
-    """
-    import math
-    e_eps = math.exp(epsilon)
-    numerator = e_eps + 2 * dp_delta - 1
-    denominator = dp_delta * (e_eps + 1)
-    if denominator <= 0 or numerator <= 0:
-        raise ValueError(f"Invalid DP parameters: epsilon={epsilon}, delta={dp_delta}")
-    k = math.ceil((1.0 / epsilon) * math.log(numerator / denominator))
-    return max(1, k)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Run Process Mining SMPC with Neon")
@@ -239,15 +227,24 @@ def main():
     neon.set_substitution('NEON_ARG_ENABLE_PARTIAL_ORDERS', args.partial_orders)
     neon.set_substitution('NEON_ARG_DELTA', args.delta)  # already in ms
     neon.set_substitution('NEON_ARG_ENABLE_DP', args.enable_dp)
-    epsilon_num = int(args.epsilon * 1000)
+    epsilon_fraction = Fraction(str(args.epsilon))
+    epsilon_num = epsilon_fraction.numerator
+    epsilon_den = epsilon_fraction.denominator
     neon.set_substitution('NEON_ARG_EPSILON_NUM', epsilon_num)
-    neon.set_substitution('NEON_ARG_EPSILON_DEN', 1000)
+    neon.set_substitution('NEON_ARG_EPSILON_DEN', epsilon_den)
 
     # (epsilon, delta)-DP partition selection (TraVaS, Rafiei et al. ICPM 2022)
     # k serves as both noise truncation bound and frequency threshold
     if args.enable_dp:
-        dp_k = compute_dp_k(args.epsilon, args.dp_delta)
-        print(f"DP partition selection: epsilon={args.epsilon}, delta={args.dp_delta}, k={dp_k}")
+        calibration = calibrate_dp(epsilon_fraction, args.dp_delta)
+        dp_k = calibration.k
+        print(
+            "DP partition selection: "
+            f"epsilon={epsilon_num}/{epsilon_den}, requested_delta={args.dp_delta}, "
+            f"ideal_delta={calibration.ideal_delta}, k={dp_k}, "
+            f"grid_tv_bound={calibration.grid_tv_bound}, "
+            f"grid_delta_reserve={calibration.grid_delta_reserve}"
+        )
         neon.set_substitution('NEON_ARG_DP_K', dp_k)
         # Override threshold: the (eps,delta)-DP guarantee (Desfontaines et al.,
         # Thm. 6) requires the STRICT release rule "noisy count > k". The MPC
