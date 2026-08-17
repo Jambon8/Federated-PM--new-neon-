@@ -332,12 +332,16 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
 
     return cases
 
-def encode_and_save(cases_list):
+def encode_and_save(cases_list, force_partial_len=None):
     """Aligns dictionaries and writes MPC input files for N parties.
 
     Args:
         cases_list: list of N case lists, one per party.
                     Each element is a list of {'id': str, 'events': [(time, act), ...]}.
+        force_partial_len: if set, pad every row to exactly this width instead of
+                    the derived maximum trace length. Callers must have truncated
+                    longer traces beforehand; used to pin the circuit width in
+                    controlled scaling experiments.
     Returns:
         (n_max, max_len) — dimensions for MPC configuration.
     """
@@ -402,6 +406,11 @@ def encode_and_save(cases_list):
 
     # 2. Determine Dimensions (max across all parties)
     max_len = max((max((len(c['events']) for c in party), default=0) for party in cases_list), default=0)
+    if force_partial_len is not None:
+        if max_len > force_partial_len:
+            raise ValueError(f"force_partial_len={force_partial_len} but a trace has {max_len} events; "
+                             "truncate traces before encoding.")
+        max_len = force_partial_len
     n_max = max(len(party) for party in cases_list)
 
     print(f"Configuration for MPC: N_PER_PARTY={n_max}, PARTIAL_LEN={max_len}, N_PARTIES={n_parties}")

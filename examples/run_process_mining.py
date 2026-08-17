@@ -79,6 +79,10 @@ def main():
                         help="DP delta parameter for (eps,delta)-DP partition selection (default: 0.01)")
     parser.add_argument("--n-per-party-cap", type=int, default=None,
                         help="Subsample to at most N case-IDs (shared across parties) before encoding. Used by E3 scaling experiments.")
+    parser.add_argument("--force-partial-len", type=int, default=None,
+                        help="Pin the encoded row width: truncate every party-local trace to at most P events "
+                             "and pad the encoding to exactly PARTIAL_LEN=P. Public preprocessing; the circuit "
+                             "cost is data-oblivious, so this pins the circuit width. Used by the E3 grid sweep.")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for subsampling (default: 42)")
     parser.add_argument("--compile-only", action="store_true",
@@ -155,7 +159,14 @@ def main():
         cases_list = [[c for c in cases if c["id"] in keep] for cases in cases_list]
         print(f"Subsampled to {len(keep)} shared case IDs (cap={args.n_per_party_cap})")
 
-    n_per_party, partial_len = importer.encode_and_save(cases_list)
+    if args.force_partial_len is not None and args.force_partial_len > 0:
+        p_cap = args.force_partial_len
+        n_truncated = sum(1 for cases in cases_list for c in cases if len(c["events"]) > p_cap)
+        cases_list = [[{**c, "events": c["events"][:p_cap]} for c in cases] for cases in cases_list]
+        print(f"Pinned row width to PARTIAL_LEN={p_cap} ({n_truncated} party-local traces truncated)")
+        n_per_party, partial_len = importer.encode_and_save(cases_list, force_partial_len=p_cap)
+    else:
+        n_per_party, partial_len = importer.encode_and_save(cases_list)
 
     print(f"Dynamic Config: N_PER_PARTY={n_per_party}, PARTIAL_LEN={partial_len}, N_PARTIES={n_parties}")
 
