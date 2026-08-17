@@ -1,0 +1,105 @@
+{
+  "seed": 42,
+  "c_cases": 500,
+  "trace_len_filter": [
+    5,
+    40
+  ],
+  "pinned_partial_len": 20,
+  "datasets": {
+    "sepsis": {
+      "joint_cases": 1050,
+      "eligible_cases": 996,
+      "sampled_cases": 500,
+      "sampled_events": 7017,
+      "max_joint_len": 40,
+      "cells": {
+        "n2": {
+          "cases_per_party": 500,
+          "max_local_len": 20,
+          "total_rows": 1000
+        },
+        "n3": {
+          "cases_per_party": 500,
+          "max_local_len": 14,
+          "total_rows": 1500
+        },
+        "n4": {
+          "cases_per_party": 500,
+          "max_local_len": 10,
+          "total_rows": 2000
+        },
+        "n5": {
+          "cases_per_party": 500,
+          "max_local_len": 8,
+          "total_rows": 2500
+        },
+        "ctrl750": {
+          "cases_per_party": 750,
+          "max_local_len": 20,
+          "total_rows": 1500,
+          "matched_n": 3
+        },
+        "ctrl1000": {
+          "cases_per_party": 1000,
+          "max_local_len": 20,
+          "total_rows": 2000,
+          "matched_n": 4
+        },
+        "ctrl1250": {
+          "cases_per_party": 1250,
+          "max_local_len": 20,
+          "total_rows": 2500,
+          "matched_n": 5
+        }
+      }
+    },
+    "bpi13_incidents": {
+      "joint_cases": 7554,
+      "eligible_cases": 4845,
+      "sampled_cases": 500,
+      "sampled_events": 5585,
+      "max_joint_len": 40,
+      "cells": {
+        "n2": {
+          "cases_per_party": 500,
+          "max_local_len": 20,
+          "total_rows": 1000
+        },
+        "n3": {
+          "cases_per_party": 500,
+          "max_local_len": 14,
+          "total_rows": 1500
+        },
+        "n4": {
+          "cases_per_party": 500,
+          "max_local_len": 10,
+          "total_rows": 2000
+        },
+        "n5": {
+          "cases_per_party": 500,
+          "max_local_len": 8,
+          "total_rows": 2500
+        },
+        "ctrl750": {
+          "cases_per_party": 750,
+          "max_local_len": 20,
+          "total_rows": 1500,
+          "matched_n": 3
+        },
+        "ctrl1000": {
+          "cases_per_party": 1000,
+          "max_local_len": 20,
+          "total_rows": 2000,
+          "matched_n": 4
+        },
+        "ctrl1250": {
+          "cases_per_party": 1250,
+          "max_local_len": 20,
+          "total_rows": 2500,
+          "matched_n": 5
+        }
+      }
+    }
+  }
+}
