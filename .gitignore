@@ -16,8 +16,8 @@ Programs/Bytecode/
 Programs/Schedules/
 Programs/asm/
 
-# Built documentation
-docs/build/
+# Documentation — working notes and the Sphinx project, not part of the artifact
+docs/
 
 # NEON debug logging config (auto-generated)
 config/debug_logging.conf
@@ -34,7 +34,9 @@ AGENTS.md
 # Thesis sources, advisor feedback, and third-party reference theses
 Thesis/
 
-# Event logs and derived party splits — obtained from the public BPI/4TU archives
+# Event logs. Ignored by default so that a stray multi-gigabyte log never
+# lands in a commit; the logs Chapter 6 actually measures are tracked
+# explicitly and stay tracked. Add a new one with: git add -f <path>
 data/
 
 # Stray root-level LaTeX build artifacts from thesis compiles
