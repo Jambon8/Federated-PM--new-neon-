@@ -241,8 +241,8 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
             event_list = trace.findall('event')
 
         for event in event_list:
-            timestamp = 0
-            activity = "Unknown"
+            timestamp = None
+            activity = None
 
             # Extract Timestamp - try with namespace first
             date_attrs = event.findall('{http://www.xes-standard.org/}date')
@@ -253,13 +253,20 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
                 if date.get('key') == 'time:timestamp':
                     # Parse ISO 8601 (e.g., 2012-03-01T00:00:00.000+01:00)
                     ts_str = date.get('value')
+                    if not ts_str:
+                        raise ValueError(f"Case {case_id} contains an empty event timestamp.")
                     try:
                         # Simplified parser (strips timezone for integer conversion)
                         dt = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
                         timestamp = int(dt.timestamp() * 1000)
                         timestamp = (timestamp // timestamp_granularity) * timestamp_granularity
-                    except ValueError:
-                        pass # Handle format errors if needed
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"Case {case_id} contains malformed timestamp {ts_str!r}."
+                        ) from exc
+
+            if timestamp is None:
+                raise ValueError(f"Case {case_id} contains an event without a timestamp.")
 
             # Extract Activity Name - try with namespace first
             string_attrs = event.findall('{http://www.xes-standard.org/}string')
@@ -269,6 +276,14 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
             for string in string_attrs:
                 if string.get('key') == 'concept:name':
                     activity = string.get('value')
+
+            if not activity:
+                raise ValueError(f"Case {case_id} contains an event without an activity name.")
+
+            if activity.startswith("Fingerprint_"):
+                raise ValueError(
+                    "Input activity names must not use the reserved Fingerprint_ prefix."
+                )
 
             # An activity is a handover (boundary) event iff it is in the global
             # list H. The same public H is applied by every party, so a shared
@@ -328,6 +343,13 @@ def encode_and_save(cases_list):
     """
     n_parties = len(cases_list)
 
+    for party_index, cases in enumerate(cases_list):
+        case_ids = [case["id"] for case in cases]
+        if "Unknown" in case_ids:
+            raise ValueError(f"Party {party_index} contains a trace without a case identifier.")
+        if len(case_ids) != len(set(case_ids)):
+            raise ValueError(f"Party {party_index} contains duplicate case identifiers.")
+
     # --- Sorting for iterative bitonic merge ---
     # P0: ascending by case_id. P1..Pk-1: descending (for bitonic merge).
     cases_list[0].sort(key=lambda c: c['id'])
@@ -342,6 +364,22 @@ def encode_and_save(cases_list):
     all_cases = [c for party in cases_list for c in party]
     all_case_ids = set(c['id'] for c in all_cases)
     all_activities = set(e[1] for c in all_cases for e in c['events'])
+
+    if len(all_case_ids) >= PAD_ID:
+        raise ValueError(f"At most {PAD_ID - 1} distinct case identifiers are supported.")
+    if len(all_activities) >= 2**17:
+        raise ValueError("The packed sort key supports at most 131071 activities.")
+    invalid_timestamps = [
+        t
+        for case in all_cases
+        for t, _activity in case["events"]
+        if t < 0 or t >= 2**43
+    ]
+    if invalid_timestamps:
+        raise ValueError("Timestamps must be nonnegative milliseconds below 2^43.")
+    if any(activity.startswith("Fingerprint_") for activity in all_activities):
+        _validate_fingerprint_maps(n_parties)
+        _validate_handover_contract(cases_list)
 
     case_id_map = {cid: i+1 for i, cid in enumerate(sorted(all_case_ids))}
     act_map = {act: i+1 for i, act in enumerate(sorted(all_activities))}
