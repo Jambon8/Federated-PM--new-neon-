@@ -30,18 +30,16 @@ PAD_ID = 2**60 # Use Max 64-bit value for ID padding to stay sorted at end
 GRANULARITY_MS = {'ms': 1, 's': 1000, 'm': 60_000, 'h': 3_600_000}
 
 # --- Keyed reversible fingerprints for the optional handover collapse ---
-# Each party replaces every maximal run of internal (non-handover) activities
-# with one keyed fingerprint and keeps a PRIVATE reversal table mapping the
-# fingerprint back to its internal activity sequence. The key is a persisted
-# per-party secret, so (a) the label is stable across runs (determinism) and
-# (b) the peer cannot brute-force the run from the public label -- expansion is
-# possible only by the owning party, which makes any disclosure opt-in.
+# The central preparation harness replaces every maximal run of internal
+# activities with a keyed fingerprint and writes one reversal table per party.
+# One persisted key makes equal runs map to equal labels across all parties.
+# Private per-party preprocessing and key custody are not implemented.
 
-def _fp_key_path(party_index):
-    return os.path.join(BASE_DIR, f"Player-Data/fp_key_P{party_index}.bin")
+def _fp_key_path():
+    return os.path.join(BASE_DIR, "Player-Data/fp_key_global.bin")
 
-def _load_or_create_fp_key(party_index):
-    path = _fp_key_path(party_index)
+def _load_or_create_fp_key():
+    path = _fp_key_path()
     if os.path.exists(path):
         with open(path, "rb") as f:
             return f.read()
@@ -68,6 +66,68 @@ def _save_fingerprint_map(party_index, fp_map):
     with open(path, "w") as f:
         json.dump(fp_map, f)
     print(f"Saved {len(fp_map)} fingerprint reversal entries to '{path}'")
+
+
+def _validate_fingerprint_maps(n_parties):
+    """Require every occurring label to expand to one sequence globally."""
+    combined = {}
+    for party_index in range(n_parties):
+        path = os.path.join(BASE_DIR, f"Player-Data/fingerprint_map_P{party_index}.json")
+        with open(path, encoding="utf-8") as stream:
+            party_map = json.load(stream)
+        for label, activities in party_map.items():
+            previous = combined.get(label)
+            if previous is not None and previous != activities:
+                raise ValueError(
+                    f"Fingerprint collision across parties on {label}: "
+                    f"{previous} vs {activities}"
+                )
+            combined[label] = activities
+    print(f"Validated {len(combined)} globally sequence-consistent fingerprint labels.")
+
+
+def _validate_handover_contract(cases_list):
+    """Validate phase separation and strict boundary times on joint traces."""
+    events_by_case = {}
+    for party_index, cases in enumerate(cases_list):
+        for case in cases:
+            joint_events = events_by_case.setdefault(case["id"], [])
+            joint_events.extend(
+                (timestamp, activity, party_index)
+                for timestamp, activity in case["events"]
+            )
+
+    for case_id, joint_events in events_by_case.items():
+        if not any(activity.startswith("Fingerprint_") for _, activity, _ in joint_events):
+            continue
+        ordered = sorted(joint_events, key=lambda item: (item[0], item[1], item[2]))
+        for previous, current in zip(ordered, ordered[1:]):
+            previous_is_fp = previous[1].startswith("Fingerprint_")
+            current_is_fp = current[1].startswith("Fingerprint_")
+            if previous_is_fp != current_is_fp and previous[0] == current[0]:
+                raise ValueError(
+                    f"Case {case_id} has a fingerprint and handover boundary "
+                    "at the same joint timestamp."
+                )
+
+        phase_fingerprints = []
+        for timestamp, activity, party_index in ordered:
+            if activity.startswith("Fingerprint_"):
+                phase_fingerprints.append((timestamp, activity, party_index))
+                continue
+            if len(phase_fingerprints) > 1:
+                raise ValueError(
+                    f"Case {case_id} has internal phases from multiple party rows "
+                    "between handover boundaries."
+                )
+            phase_fingerprints = []
+        if len(phase_fingerprints) > 1:
+            raise ValueError(
+                f"Case {case_id} has internal phases from multiple party rows "
+                "after its final handover boundary."
+            )
+
+    print("Validated joint handover phase separation and boundary timestamps.")
 
 # --- Global handover list H (public, applied identically by every party) ---
 # An activity is a handover (boundary) event iff it belongs to the single
@@ -139,7 +199,7 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
     cases = []
 
     # Per-party keyed-fingerprint state for the optional handover collapse.
-    fp_key = _load_or_create_fp_key(party_index) if use_handovers else None
+    fp_key = _load_or_create_fp_key() if use_handovers else None
     fp_map = {}  # fingerprint label -> internal activity subtrace (private reversal table)
 
     # The global handover list H, shared by every party (empty when unused).
@@ -223,6 +283,12 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
             # events with a single keyed fingerprint placed at the run's last
             # timestamp; handover events are kept unchanged.
             raw_events.sort(key=lambda x: (x[0], x[1]))
+            for previous, current in zip(raw_events, raw_events[1:]):
+                boundary_transition = previous[2] != current[2]
+                if boundary_transition and previous[0] >= current[0]:
+                    raise ValueError(
+                        "Handover boundaries require strictly increasing timestamps."
+                    )
             events = []
             run = []  # accumulated internal events (timestamp, activity)
             for (t, act, is_h) in raw_events:

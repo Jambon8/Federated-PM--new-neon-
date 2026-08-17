@@ -73,7 +73,7 @@ def main():
     parser.add_argument("--no-direct", dest="direct", action="store_false", help="Disable --direct flag at runtime: no direct communication between parties")
     parser.set_defaults(direct=True)
     # Features
-    parser.add_argument("--use-handovers", action="store_true", help="Filter out internal events and only compute on handover synchronization points")
+    parser.add_argument("--use-handovers", action="store_true", help="Collapse each party's maximal runs of internal (non-H) events into keyed fingerprint events before secret sharing; handover events are kept verbatim")
     parser.add_argument("--handover-activities", type=str, default=None,
                         help="Path to the global handover list H (one activity per line), applied identically by every party. "
                              "With --use-handovers, defaults to the union of activities flagged in the logs.")
