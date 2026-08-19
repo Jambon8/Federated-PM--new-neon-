@@ -4,421 +4,407 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon & Xenon | Secure Process Mining</title>
+    <title>Secure Process Mining</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code&display=swap"
-        rel="stylesheet">
-    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
-    <!-- Optional for icons, using unicode fallback if needed -->
 </head>
 
 <body>
 
-    <div class="container">
-        <header>
-            <h1>Secure Process Mining</h1>
-            <p>Run privacy-preserving process discovery on distributed logs</p>
-        </header>
+    <div class="app">
 
-        <!-- Configuration Section -->
-        <div class="card">
+        <!-- ------------------------------------------------- configuration -->
+        <aside class="rail">
             <h2>Configuration</h2>
             <form id="runForm">
-                <div class="grid-2">
-                    <!-- Log Selection -->
-                    <div class="form-group">
-                        <label for="log_a">Log A (Party 0)</label>
-                        <div class="file-input-wrapper">
-                            <input type="text" id="log_a" name="log_a" placeholder="/path/to/log_a.xes" required
-                                autocomplete="off">
-                            <button type="button" class="btn" onclick="openBrowser('log_a')"
-                                style="margin-left: 0.5rem;">📂 Browse</button>
-                        </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="log_b">Log B (Party 1)</label>
-                        <div class="file-input-wrapper">
-                            <input type="text" id="log_b" name="log_b" placeholder="/path/to/log_b.xes" required
-                                autocomplete="off">
-                            <button type="button" class="btn" onclick="openBrowser('log_b')"
-                                style="margin-left: 0.5rem;">📂 Browse</button>
-                        </div>
+                <div class="field">
+                    <label>Event logs</label>
+                    <div id="partyList"></div>
+                    <div class="party-actions">
+                        <button type="button" class="btn btn-small" onclick="addParty()">+ Add party</button>
+                        <span class="hint" id="partyHint"></span>
                     </div>
+                </div>
 
-                    <!-- Parameters -->
-                    <div class="form-group">
-                        <label for="threshold">Filtering Threshold</label>
-                        <input type="number" id="threshold" name="threshold" value="1" min="1">
+                <div class="field-pair">
+                    <div class="field">
+                        <label for="threshold">Release threshold k</label>
+                        <input type="number" id="threshold" value="1" min="1"
+                               oninput="refreshSuppressionState()">
                     </div>
-
-                    <div class="form-group">
+                    <div class="field">
                         <label for="threads">Threads</label>
-                        <input type="number" id="threads" name="threads" value="16" min="1">
+                        <input type="number" id="threads" value="16" min="1">
                     </div>
-
-                    <div class="form-group">
-                        <label for="k_anon">K-Anonymity</label>
-                        <select id="k_anon" name="k_anon">
-                            <option value="0">Disabled (0)</option>
-                            <option value="1">Enabled (1)</option>
+                    <div class="field">
+                        <label for="k_anon">Suppression counter</label>
+                        <select id="k_anon">
+                            <option value="0">Off</option>
+                            <option value="1">On</option>
                         </select>
                     </div>
-
-                    <div class="form-group" style="grid-column: 1 / -1;">
-                        <label style="display: flex; align-items: center; cursor: pointer;">
-                            <input type="checkbox" id="use_handovers" name="use_handovers" value="true"
-                                style="margin-right: 0.5rem; width: auto;">
-                            Only compute handover events (Fast Abstraction)
-                        </label>
+                    <div class="field">
+                        <label for="timestamp_granularity">Timestamp granularity</label>
+                        <select id="timestamp_granularity"></select>
                     </div>
-
-                    <div class="form-group" style="grid-column: 1 / -1; margin-top: -10px;">
-                        <label style="display: flex; align-items: center; cursor: pointer;">
-                            <input type="checkbox" id="partial_orders" name="partial_orders" value="true"
-                                style="margin-right: 0.5rem; width: auto;"
-                                onchange="document.getElementById('po_options').style.display = this.checked ? 'block' : 'none';">
-                            Enable Partial Orders (group concurrent events within time window)
-                        </label>
-                        <div id="po_options" style="display: none; margin-top: 10px; margin-left: 25px;">
-                            <label for="delta">Delta (&Delta;) seconds: <strong id="delta_display">1</strong></label>
-                            <input type="range" id="delta" name="delta" min="1" max="300" step="1" value="1"
-                                style="width: 250px;"
-                                oninput="document.getElementById('delta_display').textContent = this.value;">
-                            <span style="font-size: 0.85em; color: var(--text-secondary); margin-left: 0.5rem;">
-                                (1 = exact timestamp, &gt;1 = sliding window)
-                            </span>
-                        </div>
+                    <div class="field">
+                        <label for="protocol">Protocol</label>
+                        <select id="protocol" onchange="refreshProtocolNote()"></select>
                     </div>
-
-                    <div class="form-group" style="grid-column: 1 / -1; margin-top: -10px;">
-                        <label style="display: flex; align-items: center; cursor: pointer;">
-                            <input type="checkbox" id="enable_dp" name="enable_dp" value="true"
-                                style="margin-right: 0.5rem; width: auto;"
-                                onchange="toggleDp(this.checked);">
-                            Enable Differential Privacy (&epsilon;,&delta;)-DP partition selection
-                        </label>
-                        <div id="dp_options" style="display: none; margin-top: 10px; margin-left: 25px;">
-                            <div style="margin-bottom: 8px;">
-                                <label for="epsilon">Epsilon (&epsilon;): <strong id="epsilon_display">1.0</strong></label>
-                                <input type="range" id="epsilon" name="epsilon" min="0.1" max="5.0" step="0.1" value="1.0"
-                                    style="width: 250px;"
-                                    oninput="document.getElementById('epsilon_display').textContent = this.value; updateDpK();">
-                            </div>
-                            <div style="margin-bottom: 8px;">
-                                <label for="dp_delta">Delta (&delta;): <strong id="dp_delta_display">0.01</strong></label>
-                                <input type="range" id="dp_delta" name="dp_delta" min="-4" max="-0.3" step="0.1" value="-2"
-                                    style="width: 250px;"
-                                    oninput="const v = Math.pow(10, parseFloat(this.value)); document.getElementById('dp_delta_display').textContent = v.toPrecision(2); updateDpK();">
-                                <span style="font-size: 0.85em; color: var(--text-secondary); margin-left: 0.5rem;">
-                                    (log&#8321;&#8320; scale: 0.0001 &ndash; 0.5)
-                                </span>
-                            </div>
-                            <div style="padding: 6px 10px; background: rgba(255,255,255,0.05); border-radius: var(--radius); font-size: 0.9em;">
-                                Computed threshold <strong>k = <span id="dp_k_display">4</span></strong>
-                                <span style="color: var(--text-secondary); margin-left: 0.5rem;">(noise truncation bound &amp; frequency threshold)</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- New: Mode and Network -->
-                    <div class="form-group">
-                        <label for="mode">Operation Mode</label>
-                        <select id="mode" name="mode" onchange="toggleNetwork()">
+                    <div class="field">
+                        <label for="mode">Mode</label>
+                        <select id="mode" onchange="toggleNetwork()">
                             <option value="local">Local</option>
-                            <option value="local-virtual">Local Virtual (Net Sim)</option>
+                            <option value="local-virtual">Local virtual</option>
                         </select>
                     </div>
+                </div>
+                <span class="hint" id="suppressionNote"></span>
+                <span class="hint" id="protocolNote"></span>
 
-                    <div class="form-group">
-                        <label for="network">Network Profile</label>
-                        <select id="network" name="network" disabled>
-                            <option value="unlimited">Unlimited (Localhost)</option>
-                            <option value="lan">LAN</option>
-                            <option value="wan-ent">WAN Enterprise</option>
-                            <option value="wan-fast">WAN Fast</option>
-                            <option value="wan-slow">WAN Slow</option>
-                            <option value="5g-avg">5G Average</option>
-                            <option value="5g-slow">5G Slow</option>
-                        </select>
+                <div class="field" style="margin-top:10px">
+                    <label for="network">Network profile</label>
+                    <select id="network" disabled></select>
+                </div>
+
+                <div class="opt">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="use_handovers" onchange="toggleHandovers(this.checked)">
+                        Handover fingerprints
+                    </label>
+                    <div id="handover_options" class="option-body hidden">
+                        <span class="hint">Handover events stay verbatim. Each maximal run of internal
+                            events collapses into one keyed fingerprint event at the run's last
+                            timestamp.</span>
+                        <label for="handover_activities" class="hint">Global handover list H</label>
+                        <div class="file-input-wrapper">
+                            <input type="text" id="handover_activities" placeholder="optional .txt"
+                                autocomplete="off">
+                            <button type="button" class="btn btn-small"
+                                onclick="openBrowser('handover_activities')">Browse</button>
+                        </div>
+                        <span class="hint">Empty: derived as the union of the activities flagged in the
+                            logs.</span>
+                    </div>
+                </div>
+
+                <div class="opt">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="partial_orders" onchange="togglePartialOrders(this.checked)">
+                        Partial orders
+                    </label>
+                    <div id="po_options" class="option-body hidden">
+                        <label for="delta_value" class="hint">Concurrency tolerance &theta;</label>
+                        <div class="inline-inputs">
+                            <input type="number" id="delta_value" value="0" min="0" step="1">
+                            <select id="delta_unit"></select>
+                        </div>
+                        <span class="hint">&theta; = 0 is timestamp equality. A positive &theta;
+                            compensates bounded clock skew between the parties' systems.</span>
+                    </div>
+                </div>
+
+                <div class="opt">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enable_dp" onchange="toggleDp(this.checked)">
+                        Differential privacy
+                    </label>
+                    <div id="dp_options" class="option-body hidden">
+                        <div class="slider-row">
+                            <label for="epsilon">&epsilon; = <strong id="epsilon_display">1.0</strong></label>
+                            <input type="range" id="epsilon" min="0.1" max="5.0" step="0.1" value="1.0"
+                                oninput="document.getElementById('epsilon_display').textContent = this.value; updateDpPreview();">
+                        </div>
+                        <div class="slider-row">
+                            <label for="dp_delta">&delta; = <strong id="dp_delta_display">0.01</strong></label>
+                            <input type="range" id="dp_delta" min="-4" max="-0.3" step="0.1" value="-2"
+                                oninput="updateDpDeltaDisplay(); updateDpPreview();">
+                        </div>
+                        <div class="callout" id="dp_preview">Calibrating&hellip;</div>
                     </div>
                 </div>
 
                 <button type="submit" class="btn btn-primary" id="runBtn">
-                    <span class="btn-text">Run Process Mining</span>
-                    <div class="spinner hidden" id="spinner"></div>
+                    <span class="btn-text">Run</span>
+                    <span class="spinner hidden" id="spinner"></span>
                 </button>
             </form>
-
             <div id="statusMessage" class="hidden"></div>
-        </div>
+        </aside>
 
-        <!-- Results Section -->
-        <div id="resultsSection" class="hidden">
-
-            <!-- Live Output -->
-            <div class="card">
-                <h2>Execution Progress</h2>
-                <pre id="rawOutput"
-                    style="background: #000; padding: 1rem; overflow-x: auto; color: #fff; max-height: 300px; white-space: pre-wrap; font-family: 'Fira Code', monospace; font-size: 0.9em;"></pre>
+        <!-- ------------------------------------------------------- results -->
+        <main class="main">
+            <div class="main-head">
+                <h2>Run summary</h2>
+                <span class="mut" id="runMeta" style="font-size:11.5px"></span>
             </div>
 
-            <!-- Benchmarks -->
-            <div class="card hidden" id="finalResultsCard">
-                <h2>Benchmarks</h2>
-                <div class="benchmarks-grid" id="benchmarksGrid">
-                    <!-- Populated via JS -->
+            <div class="tiles" id="tilesRow"></div>
+
+            <div class="results-row">
+                <div class="col-variants">
+                    <div class="panel" id="tracesCard">
+                        <div style="display:flex;justify-content:space-between;align-items:baseline;
+                                    margin-bottom:9px">
+                            <span class="cap">Joint variants</span>
+                            <span class="mut" style="font-size:11px" id="variantMeta">by count</span>
+                        </div>
+                        <div id="revealPanel" class="reveal-panel hidden">
+                            <span class="cap">Reveal handover fingerprints</span>
+                            <div class="reveal-parties" id="revealParties"></div>
+                            <span class="hint" id="revealNote"></span>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="num" style="width:62px">Count</th>
+                                    <th class="num" style="width:62px">Share</th>
+                                    <th>Trace</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsTableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
-
-                <details>
-                    <summary style="cursor: pointer; color: var(--accent);">Detailed Step Timings</summary>
-                    <div class="timings-list" id="timingsList"></div>
-                </details>
-            </div>
-
-            <!-- Traces -->
-            <div class="card hidden" id="tracesCard">
-                <h2>Discovered Traces</h2>
-                <div class="results-table-wrapper">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th style="width: 100px;">Count</th>
-                                <th>Trace Variant</th>
-                            </tr>
-                        </thead>
-                        <tbody id="resultsTableBody">
-                            <!-- Populated via JS -->
-                        </tbody>
-                    </table>
+                <div class="col-stages">
+                    <div class="panel" id="stagesPanel">
+                        <div class="cap" style="margin-bottom:9px">Stage timings</div>
+                        <div id="timingsList"></div>
+                    </div>
                 </div>
             </div>
 
-        </div>
+            <details class="drawer" id="configDrawer">
+                <summary><span>Configuration as executed</span><span class="tail" id="configTail"></span></summary>
+                <div class="drawer-body" style="padding:11px 13px">
+                    <div id="configList"></div>
+                </div>
+            </details>
+
+            <details class="drawer" id="logDrawer">
+                <summary><span>Execution log</span><span class="tail" id="logTail"></span></summary>
+                <div class="drawer-body">
+                    <pre id="rawOutput"></pre>
+                </div>
+            </details>
+        </main>
     </div>
 
-    <!-- File Browser Modal -->
+    <!-- ------------------------------------------------------ file browser -->
     <div id="fileModal" class="modal-overlay hidden">
         <div class="modal">
             <div class="modal-header">
-                <h3 id="modalTitle">Select File</h3>
-                <button class="close-btn" onclick="closeBrowser()">×</button>
+                <h3 id="modalTitle">Select file</h3>
+                <button class="close-btn" onclick="closeBrowser()">&times;</button>
             </div>
-            <div style="margin-bottom: 0.5rem; color: var(--text-secondary); font-size: 0.9em;" id="currentPathDisplay">
-            </div>
-            <div class="file-list" id="fileList">
-                <!-- Items -->
-            </div>
+            <span class="hint mono" id="currentPathDisplay"></span>
+            <div class="file-list" id="fileList"></div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-
     <script>
-        // --- PARSER LOGIC in JS ---
-        function parseOutput(text, activityMap = {}) {
-            const lines = text.split('\n');
+        // --- State ---------------------------------------------------------
+        const SENTINEL_FALLBACK = "===NEON_RESULT_JSON===";
+        let CONFIG = {
+            protocols: [], networks: [], delta_units: ['ms', 's', 'm', 'h'],
+            granularities: ['ms', 's', 'm', 'h'], stages: [],
+            result_sentinel: SENTINEL_FALLBACK, default_browse_path: null
+        };
+        let PARTY_COUNT = 2;
+        let LAST_RAW = "";          // log of the last run, for re-decoding
+        let CURRENT_RESULTS = [];
+        let CURRENT_CASES = 0;
+        let SORT_DIR = 1;
 
-            const benchmarks = {};
-            const stepNumData = {}; // Stores (time, data, rounds) from "Stopped timer X"
-            const namedTimerData = {}; // Stores time from "Timer NAME"
+        // --- Form setup ----------------------------------------------------
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                CONFIG = Object.assign(CONFIG, await res.json());
+            } catch (e) {
+                showStatus("Could not load run options from the server; using defaults.");
+            }
 
-            const results = [];
-            let currentTrace = [];
-            let currentCount = 0;
-            let inTrace = false;
-            let totalRounds = 0;
-
-            // Regex Patterns
-            const timePat = /Time = ([\d\.]+) seconds/;
-            const timerStopPat = /Stopped timer (\d+) at ([\d\.]+) \(([\d\.]+) MB, (\d+) rounds\)/;
-            const namedTimerPat = /Timer "([^"]+)" took on average ([\d\.]+) seconds/;
-            const dataPat = /Data sent = ([\d\.]+) MB/;
-            const globalPat = /Global data sent = ([\d\.]+) MB/;
-
-            // Trace Decoding Patterns
-            const startPat = /(?:INFO.*:\s*)?RAW_RESULT Count:\s*(\d+)\s*Trace:/;
-            const endPat = /(?:INFO.*:\s*)?END_TRACE/;
-            const othersPat = /(?:INFO.*:\s*)?Others count \(below threshold\):\s*(\d+)/;
-            // Two-column format: "act_id conc_bit" or single: "act_id"
-            const valuePat = /(?:INFO.*:\s*)?(\d+)(?:\s+(\d+))?\s*$/;
-
-            lines.forEach(line => {
-                line = line.trim();
-
-                // 1. Benchmarks & Timers
-                let m = line.match(timePat);
-                if (m) benchmarks['Total Time'] = m[1] + "s";
-
-                m = line.match(timerStopPat);
-                if (m) {
-                    const rounds = parseInt(m[4]);
-                    stepNumData[m[1]] = { time: m[2] + "s", data: m[3] + " MB", rounds: rounds };
-                    totalRounds += rounds;
-                }
-
-                m = line.match(namedTimerPat);
-                if (m) namedTimerData[m[1]] = m[2] + "s";
-
-                m = line.match(dataPat);
-                if (m) benchmarks['Data Sent (Party 0)'] = m[1] + " MB";
-
-                m = line.match(globalPat);
-                if (m) benchmarks['Global Data Sent'] = m[1] + " MB";
-
-                // 2. Trace Results
-                m = line.match(startPat);
-                if (m) {
-                    currentCount = parseInt(m[1]);
-                    currentTrace = [];
-                    inTrace = true;
-                    return;
-                }
-
-                if (line.match(endPat)) {
-                    if (inTrace) {
-                        // Build structured trace: array of steps, each step is array of activity names
-                        const steps = [];
-                        let currentSet = [];
-                        currentTrace.forEach(({actId, concBit}) => {
-                            if (actId === "0") return;
-                            const name = activityMap[actId] || `Unknown(${actId})`;
-                            if (concBit === "1" && currentSet.length > 0) {
-                                currentSet.push(name);
-                            } else {
-                                if (currentSet.length > 0) steps.push(currentSet);
-                                currentSet = [name];
-                            }
-                        });
-                        if (currentSet.length > 0) steps.push(currentSet);
-                        results.push({ count: currentCount, trace: steps, type: 'trace' });
-                    }
-                    inTrace = false;
-                    return;
-                }
-
-                m = line.match(othersPat);
-                if (m) {
-                    results.push({ count: parseInt(m[1]), trace: [['<Others (Below Threshold)>']], type: 'others' });
-                    return;
-                }
-
-                if (inTrace) {
-                    m = line.match(valuePat);
-                    if (m) currentTrace.push({ actId: m[1], concBit: m[2] || "0" });
-                }
-            });
-
-            benchmarks['Total Rounds'] = totalRounds;
-
-            // Merge Steps
-            // Mapping: Step 1 -> TIMER_INPUTS, etc.
-            const stepMapping = {
-                '1': 'TIMER_INPUTS',
-                '2': 'TIMER_PSI',
-                '3': 'TIMER_RECON',
-                '4': 'TIMER_HASH',
-                '5': 'TIMER_GROUP',
-                '6': 'TIMER_OUTPUT'
-            };
-
-            const processedSteps = [];
-
-            // We iterate 1 through 6, or whatever we found
-            const allIds = new Set([...Object.keys(stepNumData)]);
-            // Ensure 1-6 are checked if they exist in named timers? 
-            // Actually usually we just check what we found.
-
-            // Let's iterate numerically sorted IDs from stepNumData
-            const sortedIds = Array.from(allIds).sort((a, b) => parseInt(a) - parseInt(b));
-
-            sortedIds.forEach(id => {
-                const numData = stepNumData[id];
-                const nameKey = stepMapping[id] || `Step ${id}`;
-                const namedTime = namedTimerData[nameKey];
-
-                // Prefer named time if available, else numbered time
-                const time = namedTime || numData.time;
-
-                processedSteps.push({
-                    name: nameKey,
-                    time: time,
-                    rounds: numData.rounds,
-                    data: numData.data
-                });
-            });
-
-            return { benchmarks, results, steps: processedSteps };
+            fillSelect('protocol', CONFIG.protocols.map(p => ({ value: p.value, label: p.label })));
+            fillSelect('network', CONFIG.networks);
+            fillSelect('timestamp_granularity', CONFIG.granularities.map(g => ({ value: g, label: g })));
+            fillSelect('delta_unit', CONFIG.delta_units.map(u => ({ value: u, label: u })));
+            document.getElementById('delta_unit').value = 's';
+            renderPartyRows();
+            refreshProtocolNote();
+            refreshSuppressionState();
+            updateDpDeltaDisplay();
         }
 
-        // Extract Activity Map
-        function extractMapFromOutput(text) {
-            const map = {};
-            const lines = text.split('\n');
-            const pat = /ID (\d+): '(.+)'/;
-            let inRing = false;
-            lines.forEach(line => {
-                if (line.includes("--- ACTIVITY DECODER RING ---")) inRing = true;
-                if (line.includes("-----------------------------")) inRing = false;
-                if (inRing) {
-                    const m = line.match(pat);
-                    if (m) map[m[1]] = m[2];
-                }
+        function fillSelect(id, options) {
+            const select = document.getElementById(id);
+            select.innerHTML = '';
+            options.forEach(opt => {
+                const el = document.createElement('option');
+                el.value = opt.value;
+                el.textContent = opt.label;
+                select.appendChild(el);
             });
-            return map;
         }
 
-        // --- DP Helpers ---
-        function computeDpK(epsilon, dpDelta) {
-            const eEps = Math.exp(epsilon);
-            const num = eEps + 2 * dpDelta - 1;
-            const den = dpDelta * (eEps + 1);
-            if (den <= 0 || num <= 0) return 1;
-            return Math.max(1, Math.ceil((1.0 / epsilon) * Math.log(num / den)));
+        function renderPartyRows() {
+            const list = document.getElementById('partyList');
+            const previous = [...list.querySelectorAll('input')].map(i => i.value);
+            list.innerHTML = '';
+
+            for (let i = 0; i < PARTY_COUNT; i++) {
+                const row = document.createElement('div');
+                row.className = 'party-row';
+                row.innerHTML = `
+                    <span class="party-label">Party ${i}</span>
+                    <div class="party-input">
+                        <input type="text" id="log_${i}" placeholder="/path/to/party_${i}.xes"
+                               autocomplete="off">
+                        <button type="button" class="btn btn-small" title="Browse">…</button>
+                        <button type="button" class="btn btn-small btn-ghost" title="Remove party">&times;</button>
+                    </div>`;
+                const [browseBtn, removeBtn] = row.querySelectorAll('button');
+                browseBtn.onclick = () => openBrowser(`log_${i}`);
+                removeBtn.onclick = () => removeParty(i);
+                removeBtn.disabled = PARTY_COUNT <= 2;
+                list.appendChild(row);
+                if (previous[i]) row.querySelector('input').value = previous[i];
+            }
+            document.getElementById('partyHint').textContent = `${PARTY_COUNT} parties`;
+            refreshProtocolNote();
         }
 
-        function updateDpK() {
-            const eps = parseFloat(document.getElementById('epsilon').value);
-            const dpDelta = Math.pow(10, parseFloat(document.getElementById('dp_delta').value));
-            const k = computeDpK(eps, dpDelta);
-            document.getElementById('dp_k_display').textContent = k;
+        function addParty() { PARTY_COUNT += 1; renderPartyRows(); }
+
+        function removeParty(index) {
+            if (PARTY_COUNT <= 2) return;
+            const values = partyLogs();
+            values.splice(index, 1);
+            PARTY_COUNT -= 1;
+            renderPartyRows();
+            values.forEach((v, i) => { document.getElementById(`log_${i}`).value = v || ''; });
+        }
+
+        function partyLogs() {
+            return [...document.querySelectorAll('#partyList input')].map(i => i.value.trim());
+        }
+
+        // --- Protocol / party-count agreement ------------------------------
+        function protocolError() {
+            const value = document.getElementById('protocol').value;
+            const entry = CONFIG.protocols.find(p => p.value === value);
+            if (!entry) return null;
+            if (PARTY_COUNT < entry.min_parties) {
+                return `${value} needs at least ${entry.min_parties} parties.`;
+            }
+            if (entry.max_parties !== null && PARTY_COUNT > entry.max_parties) {
+                return `${value} supports exactly ${entry.max_parties} parties.`;
+            }
+            return null;
+        }
+
+        function refreshProtocolNote() {
+            const note = document.getElementById('protocolNote');
+            const value = document.getElementById('protocol').value;
+            const entry = CONFIG.protocols.find(p => p.value === value);
+            const error = protocolError();
+
+            if (error) {
+                note.textContent = error;
+                note.className = 'hint hint-error';
+            } else if (entry) {
+                note.textContent = entry.max_parties === null
+                    ? `${entry.trust || value}, ${entry.min_parties}+ parties`
+                    : `${entry.trust || value}, exactly ${entry.max_parties} parties`;
+                note.className = 'hint';
+            }
+            document.getElementById('runBtn').disabled = Boolean(error);
+        }
+
+        // --- Option blocks -------------------------------------------------
+        function toggleNetwork() {
+            const mode = document.getElementById('mode').value;
+            document.getElementById('network').disabled = (mode !== 'local-virtual');
+        }
+
+        function toggleHandovers(checked) {
+            document.getElementById('handover_options').classList.toggle('hidden', !checked);
+        }
+
+        function togglePartialOrders(checked) {
+            document.getElementById('po_options').classList.toggle('hidden', !checked);
         }
 
         function toggleDp(checked) {
-            document.getElementById('dp_options').style.display = checked ? 'block' : 'none';
-            const thresholdInput = document.getElementById('threshold');
-            if (checked) {
-                thresholdInput.disabled = true;
-                thresholdInput.title = "Overridden by DP partition selection (k)";
-                thresholdInput.style.opacity = '0.5';
-                updateDpK();
-            } else {
-                thresholdInput.disabled = false;
-                thresholdInput.title = "";
-                thresholdInput.style.opacity = '1';
-            }
+            document.getElementById('dp_options').classList.toggle('hidden', !checked);
+            const threshold = document.getElementById('threshold');
+            threshold.disabled = checked;
+            threshold.title = checked ? "Set by DP partition selection (k + 1)" : "";
+            refreshSuppressionState();
+            if (checked) updateDpPreview();
         }
 
-        // --- UI Helpers ---
-        function toggleNetwork() {
-            const mode = document.getElementById('mode').value;
-            const net = document.getElementById('network');
-            net.disabled = (mode !== 'local-virtual');
+        // The suppression counter belongs to the default release regime only: under
+        // DP it would publish an exact un-noised aggregate of the suppressed counts,
+        // and at k = 1 no count falls below the threshold.
+        function refreshSuppressionState() {
+            const counter = document.getElementById('k_anon');
+            const note = document.getElementById('suppressionNote');
+            const dpOn = document.getElementById('enable_dp').checked;
+            const k = parseInt(document.getElementById('threshold').value, 10);
+
+            let reason = null;
+            if (dpOn) reason = "The suppression counter is omitted under DP; publishing it would " +
+                               "reveal an exact un-noised aggregate of the suppressed counts.";
+            else if (!(k > 1)) reason = "At k = 1 no count falls below the threshold, so the " +
+                                        "suppression counter has nothing to report.";
+
+            counter.disabled = Boolean(reason);
+            if (reason) counter.value = '0';
+            note.textContent = reason || "";
         }
 
-        // Browser Logic
+        function dpDeltaValue() {
+            return Math.pow(10, parseFloat(document.getElementById('dp_delta').value));
+        }
+
+        function updateDpDeltaDisplay() {
+            document.getElementById('dp_delta_display').textContent = dpDeltaValue().toPrecision(2);
+        }
+
+        let dpPreviewTimer = null;
+        function updateDpPreview() {
+            clearTimeout(dpPreviewTimer);
+            dpPreviewTimer = setTimeout(async () => {
+                const box = document.getElementById('dp_preview');
+                const epsilon = document.getElementById('epsilon').value;
+                const delta = dpDeltaValue();
+                try {
+                    const res = await fetch(`/api/dp-preview?epsilon=${epsilon}&delta=${delta}`);
+                    const data = await res.json();
+                    if (data.error) { box.textContent = data.error; return; }
+                    box.innerHTML = `k = <strong>${data.k}</strong>, release rule
+                        <strong>noisy count &gt; ${data.k}</strong>, threshold ${data.threshold}.
+                        Ideal &delta; ${data.ideal_delta.toPrecision(3)}, grid reserve
+                        ${data.grid_delta_reserve.toExponential(2)} at ${data.grid_bits} bits.`;
+                } catch (e) {
+                    box.textContent = "Calibration unavailable.";
+                }
+            }, 150);
+        }
+
+        // --- File browser --------------------------------------------------
         let currentInputTarget = null;
+
         async function openBrowser(inputId, path = null) {
             currentInputTarget = inputId;
-            const modal = document.getElementById('fileModal');
-            modal.classList.remove('hidden');
+            document.getElementById('fileModal').classList.remove('hidden');
             if (!path) {
                 const currentVal = document.getElementById(inputId).value;
                 if (currentVal && currentVal.startsWith('/')) {
                     path = currentVal.substring(0, currentVal.lastIndexOf('/'));
                 } else {
-                    // CHANGED DEFAULT PATH as requested
-                    path = "/home/jamil/Documents/Master_Input";
+                    path = CONFIG.default_browse_path || '/';
                 }
             }
             loadBrowserPath(path);
@@ -429,16 +415,19 @@
         async function loadBrowserPath(path) {
             document.getElementById('currentPathDisplay').textContent = path;
             const list = document.getElementById('fileList');
-            list.innerHTML = '<div style="color:var(--text-secondary)">Loading...</div>';
+            list.innerHTML = '<div class="hint" style="padding:8px 4px">Loading…</div>';
             try {
                 const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
                 const data = await res.json();
-                if (data.error) { list.innerHTML = `<div style="color:var(--error)">${data.error}</div>`; return; }
+                if (data.error) {
+                    list.innerHTML = `<div class="hint hint-error" style="padding:8px 4px">${data.error}</div>`;
+                    return;
+                }
                 list.innerHTML = '';
                 data.items.forEach(item => {
                     const el = document.createElement('div');
                     el.className = 'file-item';
-                    const icon = item.type === 'directory' ? '📁' : '📄';
+                    const icon = item.type === 'directory' ? '/' : '·';
                     el.innerHTML = `<span class="file-icon">${icon}</span><span class="file-name">${item.name}</span>`;
                     el.onclick = () => {
                         if (item.type === 'directory') loadBrowserPath(item.path);
@@ -446,188 +435,394 @@
                     };
                     list.appendChild(el);
                 });
-            } catch (e) { list.innerHTML = `<div style="color:var(--error)">Failed to load.</div>`; }
+            } catch (e) {
+                list.innerHTML = `<div class="hint hint-error" style="padding:8px 4px">Failed to load.</div>`;
+            }
         }
 
-        // Run Logic
+        // --- Running -------------------------------------------------------
+        function showStatus(message) {
+            const box = document.getElementById('statusMessage');
+            box.textContent = message;
+            box.className = 'status-message';
+        }
+
+        function buildPayload() {
+            const deltaValue = parseInt(document.getElementById('delta_value').value || '0', 10);
+            const deltaUnit = document.getElementById('delta_unit').value;
+
+            return {
+                logs: partyLogs(),
+                threshold: parseInt(document.getElementById('threshold').value, 10),
+                threads: parseInt(document.getElementById('threads').value, 10),
+                k_anon: parseInt(document.getElementById('k_anon').value, 10),
+                timestamp_granularity: document.getElementById('timestamp_granularity').value,
+                protocol: document.getElementById('protocol').value,
+                mode: document.getElementById('mode').value,
+                network: document.getElementById('network').value,
+                use_handovers: document.getElementById('use_handovers').checked,
+                handover_activities: document.getElementById('handover_activities').value.trim() || null,
+                partial_orders: document.getElementById('partial_orders').checked,
+                delta: deltaValue === 0 ? "0" : `${deltaValue}${deltaUnit}`,
+                enable_dp: document.getElementById('enable_dp').checked,
+                epsilon: parseFloat(document.getElementById('epsilon').value),
+                dp_delta: dpDeltaValue()
+            };
+        }
+
         document.getElementById('runForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('runBtn');
             const spinner = document.getElementById('spinner');
-            const resultsSection = document.getElementById('resultsSection');
             const rawOutput = document.getElementById('rawOutput');
-            const finalResultsCard = document.getElementById('finalResultsCard');
-            const tracesCard = document.getElementById('tracesCard');
+            const logDrawer = document.getElementById('logDrawer');
+            const logTail = document.getElementById('logTail');
+            const sentinel = CONFIG.result_sentinel || SENTINEL_FALLBACK;
 
-            document.getElementById('statusMessage').classList.add('hidden');
-            resultsSection.classList.remove('hidden');
-            finalResultsCard.classList.add('hidden');
-            tracesCard.classList.add('hidden');
+            const blocking = protocolError();
+            if (blocking) { showStatus(blocking); return; }
+            if (partyLogs().some(p => !p)) { showStatus("Every party needs an event log."); return; }
+
+            document.getElementById('statusMessage').className = 'hidden';
             rawOutput.textContent = "";
+            logTail.textContent = "";
+            logDrawer.open = true;
             btn.disabled = true;
             spinner.classList.remove('hidden');
-
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData.entries());
-            data.threshold = parseInt(data.threshold);
-            data.threads = parseInt(data.threads);
-            data.k_anon = parseInt(data.k_anon);
-            data.use_handovers = document.getElementById('use_handovers').checked;
-            data.partial_orders = document.getElementById('partial_orders').checked;
-            data.delta = parseInt(document.getElementById('delta').value);
-            data.enable_dp = document.getElementById('enable_dp').checked;
-            data.epsilon = parseFloat(document.getElementById('epsilon').value);
-            data.dp_delta = Math.pow(10, parseFloat(document.getElementById('dp_delta').value));
 
             try {
                 const response = await fetch('/api/run', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify(buildPayload())
                 });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    showStatus(data.error || `Server refused the run (${response.status}).`);
+                    btn.disabled = false;
+                    spinner.classList.add('hidden');
+                    logDrawer.open = false;
+                    return;
+                }
+
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                let aggregatedText = "";
+                const chunks = [];
+                let lastFlush = 0;
+
+                const flush = () => {
+                    const all = chunks.join("");
+                    const cut = all.indexOf(sentinel);
+                    const log = cut === -1 ? all : all.slice(0, cut);
+                    rawOutput.textContent = log;
+                    rawOutput.scrollTop = rawOutput.scrollHeight;
+                    const lines = log.trimEnd().split("\n");
+                    logTail.textContent = lines[lines.length - 1] || "";
+                };
+
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-                    const text = decoder.decode(value);
-                    aggregatedText += text;
-                    rawOutput.textContent += text;
-                    rawOutput.scrollTop = rawOutput.scrollHeight;
+                    chunks.push(decoder.decode(value, { stream: true }));
+                    if (Date.now() - lastFlush > 120) { flush(); lastFlush = Date.now(); }
                 }
+                flush();
+
                 spinner.classList.add('hidden');
                 btn.disabled = false;
 
-                // Parse & Render
-                const actMap = extractMapFromOutput(aggregatedText);
-                const parsed = parseOutput(aggregatedText, actMap);
-                renderResults(parsed);
+                const all = chunks.join("");
+                const cut = all.indexOf(sentinel);
+                LAST_RAW = cut === -1 ? all : all.slice(0, cut);
+                if (cut === -1) {
+                    showStatus("Run produced no result payload; see the execution log.");
+                    return;
+                }
+
+                try {
+                    renderResults(JSON.parse(all.slice(cut + sentinel.length).trim()));
+                    logDrawer.open = false;
+                } catch (err) {
+                    showStatus(`Could not read the result payload: ${err.message}`);
+                }
             } catch (err) {
-                rawOutput.textContent += `\n[Fatal Client Error]: ${err.message}`;
+                rawOutput.textContent += `\n[client error] ${err.message}`;
                 btn.disabled = false;
                 spinner.classList.add('hidden');
             }
         });
 
+        // --- Rendering -----------------------------------------------------
         function renderResults(data) {
-            const finalResultsCard = document.getElementById('finalResultsCard');
-            const tracesCard = document.getElementById('tracesCard');
-            finalResultsCard.classList.remove('hidden');
+            const results = data.results || [];
+            const traces = results.filter(r => r.type === 'trace');
+            CURRENT_CASES = results.reduce((sum, r) => sum + r.count, 0);
 
-            // 1. Benchmarks
-            const grid = document.getElementById('benchmarksGrid');
-            grid.innerHTML = '';
-            // Updated keys as requested: Total Rounds instead of Data Sent
-            const keys = ['Total Time', 'Total Rounds', 'Global Data Sent'];
-            keys.forEach(k => {
-                if (data.benchmarks[k] !== undefined) {
-                    const item = document.createElement('div');
-                    item.className = 'benchmark-item';
-                    item.innerHTML = `<div class="benchmark-value">${data.benchmarks[k]}</div><div class="benchmark-label">${k}</div>`;
-                    grid.appendChild(item);
-                }
+            renderMeta(data);
+            renderTiles(data, traces.length);
+            renderSteps(data.steps || []);
+            renderConfig(data);
+
+            const parties = parseInt((data.config || {}).Parties, 10) || PARTY_COUNT;
+            if (hasFingerprints(results)) renderRevealControls(parties);
+
+            document.getElementById('variantMeta').textContent =
+                `${traces.length} variants · ${CURRENT_CASES} cases`;
+            renderTable(results);
+        }
+
+        function renderMeta(data) {
+            const cfg = data.config || {};
+            const parts = [];
+            if (cfg.Protocol) parts.push(cfg.Protocol);
+            if (cfg.Parties) parts.push(`${cfg.Parties} parties`);
+            if (cfg.Runtime) parts.push(`run ${cfg.Runtime}`);
+            const total = parseFloat(cfg['Total (compile + run)']);
+            const run = parseFloat(cfg.Runtime);
+            if (!isNaN(total) && !isNaN(run)) parts.push(`compile ${(total - run).toFixed(1)}s`);
+            if (data.dp) parts.push(`DP ε=${data.dp.epsilon_exact || data.dp.epsilon}, k=${data.dp.k}`);
+            if (data.handover) parts.push(`|H| = ${data.handover.activities}`);
+            document.getElementById('runMeta').textContent = parts.join(' · ');
+        }
+
+        function renderTiles(data, variantCount) {
+            const b = data.benchmarks || {};
+            const tiles = [
+                [variantCount, 'Variants released'],
+                [CURRENT_CASES, 'Shared cases'],
+                [formatMB(b['Data Sent (Party 0)']), 'Sent by party 0'],
+                [formatMB(b['Global Data Sent']), 'All parties'],
+                [b['Total Rounds'] !== undefined ? formatCount(b['Total Rounds']) : '—', 'Rounds']
+            ];
+            const row = document.getElementById('tilesRow');
+            row.innerHTML = '';
+            tiles.forEach(([value, label]) => {
+                const el = document.createElement('div');
+                el.className = 'tile';
+                el.innerHTML = `<div class="v">${value}</div><div class="l">${label}</div>`;
+                row.appendChild(el);
             });
+        }
 
-            // Detailed Timings Table
-            const timingsList = document.getElementById('timingsList');
-            timingsList.innerHTML = '';
+        function formatMB(value) {
+            if (value === null || value === undefined) return '—';
+            const mb = parseFloat(value);
+            if (isNaN(mb)) return value;
+            return (mb < 0.01 && mb > 0 ? mb.toExponential(1) : mb.toFixed(2)) + ' MB';
+        }
 
-            // Create Table Structure for Steps
-            if (data.steps && data.steps.length > 0) {
-                const table = document.createElement('table');
-                table.style.width = '100%';
-                table.style.marginTop = '1rem';
-                table.style.borderCollapse = 'collapse';
-                table.innerHTML = `
-                <thead>
-                    <tr style="text-align:left; border-bottom:1px solid var(--border);">
-                        <th style="padding:0.5rem;">Step Name</th>
-                        <th style="padding:0.5rem;">Runtime</th>
-                        <th style="padding:0.5rem;">Rounds</th>
-                        <th style="padding:0.5rem;">Data Sent</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            `;
-                const tbody = table.querySelector('tbody');
+        function formatCount(n) {
+            const value = Number(n);
+            if (!isFinite(value)) return n;
+            if (value >= 1e6) return (value / 1e6).toFixed(2) + ' M';
+            if (value >= 1e4) return (value / 1e3).toFixed(1) + ' k';
+            return value.toLocaleString('en-US');
+        }
 
-                data.steps.forEach(t => {
-                    const tr = document.createElement('tr');
-                    tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-                    tr.innerHTML = `
-                    <td style="padding:0.5rem;">${t.name}</td>
-                    <td style="padding:0.5rem;">${t.time}</td>
-                    <td style="padding:0.5rem;">${t.rounds}</td>
-                    <td style="padding:0.5rem;">${t.data}</td>
-                `;
-                    tbody.appendChild(tr);
-                });
-                timingsList.appendChild(table);
+        function renderSteps(steps) {
+            // One row per stage. Sub-timers (Grouping Setup/Sort/Count) are not shown.
+            const stages = steps.filter(s => !s.nested);
+            const box = document.getElementById('timingsList');
+            box.innerHTML = '';
+            if (stages.length === 0) {
+                box.innerHTML = '<span class="hint">No stage timers reported.</span>';
+                return;
             }
 
-            if (data.results.length > 0) {
-                tracesCard.classList.remove('hidden');
+            const seconds = stages.map(s => parseFloat(s.time) || 0);
+            const peak = Math.max(...seconds, 0) || 1;
+
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead><tr><th>Stage</th><th class="num">Time</th><th class="num">Rounds</th>
+                    <th class="num">Sent</th><th></th></tr></thead><tbody></tbody>`;
+            const tbody = table.querySelector('tbody');
+
+            stages.forEach((stage, i) => {
+                const width = (100 * seconds[i] / peak).toFixed(1);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${stage.stage ? stage.stage + ' · ' : ''}${stage.name}</td>
+                    <td class="num">${formatSeconds(stage.time)}</td>
+                    <td class="num">${stage.rounds === null || stage.rounds === undefined
+                        ? '—' : Number(stage.rounds).toLocaleString('en-US')}</td>
+                    <td class="num">${stage.data ? formatMB(stage.data) : '—'}</td>
+                    <td class="cell-bar"><div class="bartrack">
+                        <div class="bar" style="width:${width}%"></div></div></td>`;
+                tbody.appendChild(tr);
+            });
+            box.appendChild(table);
+        }
+
+        function formatSeconds(value) {
+            const seconds = parseFloat(value);
+            if (isNaN(seconds)) return value || '—';
+            return seconds.toFixed(3) + ' s';
+        }
+
+        function renderConfig(data) {
+            const box = document.getElementById('configList');
+            const rows = Object.entries(data.config || {});
+            if (data.handover) rows.push(['Handover list H', `${data.handover.activities} activities`]);
+            if (data.dp) {
+                rows.push(['DP epsilon', data.dp.epsilon_exact || String(data.dp.epsilon)]);
+                if (data.dp.k !== undefined && data.dp.k !== null) rows.push(['DP k', String(data.dp.k)]);
+            }
+            if (data.command) rows.push(['Command', data.command.join(' ')]);
+
+            document.getElementById('configTail').textContent =
+                (data.config && data.config.Protocol)
+                    ? `${data.config.Protocol} · N = ${data.config.N || '?'} · row width ${data.config.Partial_Len || '?'}`
+                    : '';
+
+            box.innerHTML = '';
+            if (rows.length === 0) {
+                box.innerHTML = '<span class="hint">Nothing echoed.</span>';
+                return;
+            }
+            const table = document.createElement('table');
+            table.className = 'kv-table';
+            table.innerHTML = '<tbody></tbody>';
+            const tbody = table.querySelector('tbody');
+            rows.forEach(([key, value]) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="kv-key">${key}</td><td class="kv-value">${value}</td>`;
+                tbody.appendChild(tr);
+            });
+            box.appendChild(table);
+        }
+
+        function hasFingerprints(results) {
+            return results.some(r => r.trace.some(step =>
+                step.some(name => name.startsWith('Fingerprint_'))));
+        }
+
+        function renderRevealControls(parties) {
+            const panel = document.getElementById('revealPanel');
+            const box = document.getElementById('revealParties');
+            panel.classList.remove('hidden');
+            box.innerHTML = '';
+            for (let p = 0; p < parties; p++) {
+                const label = document.createElement('label');
+                label.className = 'checkbox-label';
+                label.innerHTML = `<input type="checkbox" value="${p}" onchange="applyReveal()"> Party ${p}`;
+                box.appendChild(label);
+            }
+            document.getElementById('revealNote').textContent =
+                "Labels stay opaque until a party applies its reversal table.";
+        }
+
+        async function applyReveal() {
+            const parties = [...document.querySelectorAll('#revealParties input:checked')]
+                .map(i => parseInt(i.value, 10));
+            const note = document.getElementById('revealNote');
+
+            if (parties.length === 0) {
+                note.textContent = "Labels stay opaque until a party applies its reversal table.";
+            }
+            try {
+                const res = await fetch('/api/decode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ raw: LAST_RAW, reveal_from: parties })
+                });
+                const data = await res.json();
+                if (data.error) { note.textContent = data.error; return; }
                 renderTable(data.results);
+                if (parties.length > 0) {
+                    const who = parties.map(p => `party ${p}`).join(', ');
+                    note.textContent = data.revealed_labels > 0
+                        ? `${data.revealed_labels} labels applied from ${who}.`
+                        : `No reversal table found for ${who}.`;
+                }
+            } catch (err) {
+                note.textContent = `Re-decoding failed: ${err.message}`;
             }
         }
 
-        // Sorting Logic
-        let currentResults = [];
-        let sortDir = 1;
+        function formatStep(step) {
+            if (step.length === 1) return step[0];
+            const counts = {};
+            step.forEach(name => { counts[name] = (counts[name] || 0) + 1; });
+            const parts = Object.keys(counts).sort()
+                .map(name => counts[name] > 1 ? `${name}^${counts[name]}` : name);
+            return '[' + parts.join(', ') + ']';
+        }
+
         function renderTable(results) {
-            currentResults = results;
+            CURRENT_RESULTS = results;
             const tbody = document.getElementById('resultsTableBody');
             tbody.innerHTML = '';
             results.forEach(r => {
                 const tr = document.createElement('tr');
-                const traceTd = document.createElement('td');
-                traceTd.className = 'trace-cell';
-                if (r.type === 'trace') {
-                    traceTd.innerHTML = r.trace.map(step => {
-                        if (step.length === 1) return step[0];
-                        const counts = {};
-                        step.forEach(n => { counts[n] = (counts[n] || 0) + 1; });
-                        const parts = Object.keys(counts).sort().map(n =>
-                            counts[n] > 1 ? n + '^' + counts[n] : n
-                        );
-                        return '[' + parts.join(', ') + ']';
-                    }).join('<span class="arrow">&rarr;</span>');
-                } else {
-                    traceTd.textContent = r.trace[0][0];
-                    traceTd.style.color = 'var(--text-secondary)';
-                    traceTd.style.fontStyle = 'italic';
-                }
 
                 const tdCount = document.createElement('td');
+                tdCount.className = 'num';
                 tdCount.textContent = r.count;
-                tr.appendChild(tdCount);
 
-                tr.appendChild(traceTd);
+                const tdShare = document.createElement('td');
+                tdShare.className = 'num mut';
+                tdShare.textContent = CURRENT_CASES
+                    ? (100 * r.count / CURRENT_CASES).toFixed(1) + '%' : '';
+
+                const tdTrace = document.createElement('td');
+                if (r.type === 'trace') {
+                    tdTrace.className = 'trace-cell';
+                    // Spaces around the arrow give the browser a break opportunity, so a
+                    // long variant wraps between activities instead of mid-word.
+                    tdTrace.innerHTML = r.trace.map(formatStep)
+                        .join(' <span class="arrow">→</span> ');
+                } else {
+                    tdTrace.className = 'trace-others';
+                    tdTrace.textContent = 'Suppression counter';
+                }
+
+                tr.appendChild(tdCount);
+                tr.appendChild(tdShare);
+                tr.appendChild(tdTrace);
                 tbody.appendChild(tr);
             });
 
-            // Headers
             const ths = document.querySelectorAll('#tracesCard th');
-            if (ths.length >= 2) {
+            if (ths.length >= 3) {
                 ths[0].onclick = () => sortTable('count');
-                ths[0].style.cursor = 'pointer'; ths[0].title = "Sort by Count";
-
-                ths[1].onclick = () => sortTable('trace');
-                ths[1].style.cursor = 'pointer'; ths[1].title = "Sort by Variant";
+                ths[0].style.cursor = 'pointer';
+                ths[2].onclick = () => sortTable('trace');
+                ths[2].style.cursor = 'pointer';
             }
         }
 
         function sortTable(key) {
-            sortDir = -sortDir;
-            currentResults.sort((a, b) => {
-                if (key === 'count') return (a.count - b.count) * sortDir;
+            SORT_DIR = -SORT_DIR;
+            CURRENT_RESULTS.sort((a, b) => {
+                if (key === 'count') return (a.count - b.count) * SORT_DIR;
                 const sa = a.trace.map(s => s.join(',')).join(' ');
                 const sb = b.trace.map(s => s.join(',')).join(' ');
-                return sa.localeCompare(sb) * sortDir;
+                return sa.localeCompare(sb) * SORT_DIR;
             });
-            renderTable(currentResults);
+            renderTable(CURRENT_RESULTS);
         }
+
+        function showEmptyState() {
+            document.getElementById('timingsList').innerHTML =
+                '<span class="hint">No run yet.</span>';
+            document.getElementById('variantMeta').textContent = '';
+            document.getElementById('resultsTableBody').innerHTML =
+                '<tr><td colspan="3" class="hint">No run yet.</td></tr>';
+            const row = document.getElementById('tilesRow');
+            row.innerHTML = '';
+            ['Variants released', 'Shared cases', 'Sent by party 0', 'All parties', 'Rounds']
+                .forEach(label => {
+                    const el = document.createElement('div');
+                    el.className = 'tile';
+                    el.innerHTML = `<div class="v mut">—</div><div class="l">${label}</div>`;
+                    row.appendChild(el);
+                });
+        }
+
+        showEmptyState();
+        loadConfig();
     </script>
 
 </body>
