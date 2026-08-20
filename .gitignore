@@ -22,8 +22,6 @@ docs/
 # NEON debug logging config (auto-generated)
 config/debug_logging.conf
 
-MIGRATION_NOTES.md
-
 # Agent config
 .claude/
 CLAUDE.md
@@ -60,6 +58,3 @@ eval/commands*.txt
 eval/claix_*.sh
 eval/cluster_*
 eval/run_on_hpc.sh
-
-# Presentations
-presentation/

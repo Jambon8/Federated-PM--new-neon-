@@ -38,7 +38,9 @@ For more than two parties, pass one log per party:
 
 ```bash
 python3 examples/run_process_mining.py --logs \
-  data/split/party_0.xes data/split/party_1.xes data/split/party_2.xes
+  data/bpi13_open/split_3/party_0.xes \
+  data/bpi13_open/split_3/party_1.xes \
+  data/bpi13_open/split_3/party_2.xes
 ```
 
 ### Inputs
@@ -134,7 +136,7 @@ some_command | python3 decode_output.py
 
 ## Datasets
 
-`data/` holds every event log the evaluation measures. The two-party logs are synthetic federations of public single-organization logs from the [4TU](https://data.4tu.nl/) and BPI Challenge archives: each log is split into an `OrgA` and an `OrgB` partition on a case attribute, so both partitions describe the same cases from different organizational perspectives. The three-, four-, and five-party splits under `data/split*/`, `data/bpi13_*/`, `data/sepsis/`, and `data/e4b/` are derived from the same logs round-robin. Cite the original archive entry when reusing a log.
+`data/` holds every event log the evaluation measures. The two-party logs are synthetic federations of public single-organization logs from the [4TU](https://data.4tu.nl/) and BPI Challenge archives: each log is split into an `OrgA` and an `OrgB` partition on a case attribute, so both partitions describe the same cases from different organizational perspectives. The three-, four-, and five-party splits under `data/bpi13_open/`, `data/bpi13_closed/`, `data/bpi13_incidents/`, `data/sepsis/`, and `data/e4b/` are derived from the same logs round-robin. Cite the original archive entry when reusing a log.
 
 Logs the experiment registry never reads are not tracked. New logs are ignored by default, so add one explicitly:
 
@@ -179,12 +181,11 @@ python3 -m unittest discover -s tests
 ├── decode_output.py                 # CLI output decoder
 ├── app.py, api_helper.py            # Flask web server and output parsing
 ├── templates/, static/              # Web UI
-├── ProgramFiles/                    # NEON library
+├── ProgramFiles/                    # NEON library (see README_NEON.md)
 │   └── dp_calibration.py            # (eps, delta) -> threshold calibration
 ├── eval/                            # Experiment registry, runners, plotting
 ├── tests/                           # Unit tests
 ├── data/                            # Event logs
-├── XENON/                           # Cost estimation tooling
 ├── setup.py                         # MP-SPDZ installation
 ├── temp/MP/mp-spdz-0.4.2/           # MP-SPDZ (installed, not tracked)
 └── Player-Data/                     # Runtime I/O (inputs, outputs, keys)
