@@ -24,7 +24,7 @@ from eval.thesis_experiments import N2_DATASETS
 from eval.utils import find_run, load_run
 
 
-RESULTS = ROOT / "eval_results" / "e1_correctness"
+RESULTS = ROOT / "eval_results" / "correctness"
 OUTPUT = ROOT / "eval_results" / "e1_independent_correctness.json"
 DATASETS = (
     "bpi13_incidents",

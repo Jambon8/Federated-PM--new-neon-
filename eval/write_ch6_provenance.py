@@ -23,21 +23,22 @@ from eval.utils import run_files
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "eval_results" / "ch6_provenance_manifest.json"
-# The reported experiments. e3_scaling_input is excluded: the controlled grid
-# superseded it, and its records stay local.
+# The reported experiments, by their result-directory names. The superseded
+# input-scaling records are excluded: the controlled grid replaced them and they
+# stay local.
 RESULT_DIRS = (
-    "e1_correctness",
-    "e2_performance",
-    "e4_scaling_n",
-    "e5_handovers",
-    "e6_partial_orders",
-    "e7_network",
-    "e8_dp",
-    "e8b_dp_delta",
-    "e9_kanonymity",
-    "e10_protocols",
-    "e3_grid",
-    "e4b_scaling_n",
+    "correctness",
+    "performance_default",
+    "performance_backends",
+    "scaling_input_size",
+    "scaling_party_count",
+    "scaling_party_count_controlled",
+    "scaling_network_latency",
+    "modes_handover",
+    "modes_partial_order",
+    "protection_k_anonymity",
+    "protection_dp",
+    "protection_dp_epsilon_delta",
 )
 AUDIT_FILES = (
     "eval/verify_e1_independent.py",

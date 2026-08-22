@@ -24,7 +24,7 @@ from pipeline import import_xes
 
 DATA = ROOT / "data"
 C_CASES = 500
-RESULTS = ROOT / "eval_results" / "e4b_scaling_n"
+RESULTS = ROOT / "eval_results" / "scaling_party_count_controlled"
 OUTPUT = ROOT / "eval_results" / "e4b_output_equivalence.json"
 DATASETS = ("bpi13_incidents", "sepsis")
 PARTY_COUNTS = (2, 3, 4, 5)

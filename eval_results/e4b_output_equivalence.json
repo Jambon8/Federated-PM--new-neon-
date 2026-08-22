@@ -8,19 +8,19 @@
         "same_joint_release_as_n2": true,
         "repetitions": [
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N2__rep0.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N2__rep0.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N2__rep1.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N2__rep1.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N2__rep2.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N2__rep2.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
@@ -33,19 +33,19 @@
         "same_joint_release_as_n2": true,
         "repetitions": [
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N3__rep0.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N3__rep0.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N3__rep1.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N3__rep1.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N3__rep2.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N3__rep2.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
@@ -58,19 +58,19 @@
         "same_joint_release_as_n2": true,
         "repetitions": [
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N4__rep0.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N4__rep0.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N4__rep1.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N4__rep1.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N4__rep2.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N4__rep2.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
@@ -83,19 +83,19 @@
         "same_joint_release_as_n2": true,
         "repetitions": [
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N5__rep0.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N5__rep0.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N5__rep1.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N5__rep1.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N5__rep2.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__bpi13_incidents__N5__rep2.json.gz",
             "match": true,
             "stored_variants": 248,
             "stored_cases": 500
@@ -110,19 +110,19 @@
         "same_joint_release_as_n2": true,
         "repetitions": [
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N2__rep0.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N2__rep0.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N2__rep1.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N2__rep1.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N2__rep2.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N2__rep2.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
@@ -135,19 +135,19 @@
         "same_joint_release_as_n2": true,
         "repetitions": [
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N3__rep0.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N3__rep0.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N3__rep1.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N3__rep1.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N3__rep2.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N3__rep2.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
@@ -160,19 +160,19 @@
         "same_joint_release_as_n2": true,
         "repetitions": [
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N4__rep0.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N4__rep0.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N4__rep1.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N4__rep1.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N4__rep2.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N4__rep2.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
@@ -185,19 +185,19 @@
         "same_joint_release_as_n2": true,
         "repetitions": [
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N5__rep0.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N5__rep0.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N5__rep1.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N5__rep1.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500
           },
           {
-            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N5__rep2.json.gz",
+            "result": "eval_results/scaling_party_count_controlled/e4b__sepsis__N5__rep2.json.gz",
             "match": true,
             "stored_variants": 368,
             "stored_cases": 500

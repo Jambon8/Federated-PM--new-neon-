@@ -56,9 +56,9 @@ eval_results/*
 !eval_results/*/
 eval_results/*/*.json
 
-# Superseded by the controlled grid (e3g), which is what the thesis reports.
-eval_results/e3_scaling_input/
-eval_results/e3_scaling_input.csv
+# Superseded by the controlled grid, which is what the thesis reports.
+eval_results/scaling_input_size_superseded/
+eval_results/scaling_input_size_superseded.csv
 
 # Diagnostics whose output the thesis does not carry.
 eval_results/stage_breakdown/

@@ -62,7 +62,7 @@ import json, os, sys
 sys.path.insert(0, os.environ["REPO_FOR_PY"])
 from eval.thesis_experiments import all_runs
 
-results_dir = os.path.join(os.environ["REPO_FOR_PY"], "eval_results", "e7_network")
+results_dir = os.path.join(os.environ["REPO_FOR_PY"], "eval_results", "scaling_network_latency")
 done = set()
 if os.path.isdir(results_dir):
     for fn in os.listdir(results_dir):

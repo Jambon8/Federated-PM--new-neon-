@@ -190,6 +190,26 @@ subset can be selected or fed to a job scheduler; `--aggregate` then reduces
 whatever completed into `eval_results/<experiment>.csv`, which is what the
 tables and figures read.
 
+Result directories carry the vocabulary of the evaluation chapter:
+
+| Directory | Reported in |
+|---|---|
+| `correctness/` | Correctness |
+| `performance_default/` | Baseline Performance — Default Configuration |
+| `performance_backends/` | Baseline Performance — Backend Comparison |
+| `scaling_input_size/` | Scaling — Input Size |
+| `scaling_party_count/` | Scaling — Party Count |
+| `scaling_party_count_controlled/` | Scaling — Party Count, at fixed input size |
+| `scaling_network_latency/` | Scaling — Network Latency |
+| `modes_handover/` | Optional Representation — Handover Preprocessing |
+| `modes_partial_order/` | Optional Representation — Partial Order Strategy |
+| `protection_k_anonymity/` | Output Protection — k-Anonymity |
+| `protection_dp/` | Output Protection — Differential Privacy |
+| `protection_dp_epsilon_delta/` | Output Protection — Differential Privacy, epsilon-delta grid |
+
+Run identifiers keep their original short form, so `--run` arguments and the
+stored records read the same as when they were measured.
+
 Correctness is checked independently of the harness, by reconstructing the
 expected release from the party logs directly and comparing it against the
 stored MPC output:

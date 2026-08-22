@@ -13,7 +13,7 @@ from eval.utils import find_run, load_run  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "eval_results" / "e10_protocols"
+RESULTS = ROOT / "eval_results" / "performance_backends"
 OUTPUT = ROOT / "eval_results" / "e10_output_equivalence.json"
 DATASETS = ("bpi13_open", "bpi13_closed", "sepsis", "bpi13_incidents")
 PROTOCOLS = ("semi", "rep_bin")

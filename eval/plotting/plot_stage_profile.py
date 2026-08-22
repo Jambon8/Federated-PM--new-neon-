@@ -20,7 +20,7 @@ import numpy as np
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RESULTS = ROOT / "eval_results" / "e2_performance"
+RESULTS = ROOT / "eval_results" / "performance_default"
 OUTPUT = ROOT / "Thesis" / "thesis-main" / "figures" / "stage_profile.pdf"
 
 STAGES = [

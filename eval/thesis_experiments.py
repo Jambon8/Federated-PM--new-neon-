@@ -30,6 +30,31 @@ sys.path.insert(0, PROJECT_ROOT)
 RESULTS_ROOT = os.environ.get("NEON_RESULTS_ROOT", os.path.join(PROJECT_ROOT, "eval_results"))
 
 from eval.utils import load_run, run_files  # noqa: E402
+
+# Result directories carry the vocabulary of the evaluation chapter. The
+# ``experiment`` field inside a stored record keeps its original value, so the
+# mapping is explicit rather than derived.
+RESULT_DIR = {
+    "e1_correctness":     "correctness",
+    "e2_performance":     "performance_default",
+    "e10_protocols":      "performance_backends",
+    "e3_grid":            "scaling_input_size",
+    "e3_scaling_input":   "scaling_input_size_superseded",
+    "e4_scaling_n":       "scaling_party_count",
+    "e4b_scaling_n":      "scaling_party_count_controlled",
+    "e7_network":         "scaling_network_latency",
+    "e5_handovers":       "modes_handover",
+    "e6_partial_orders":  "modes_partial_order",
+    "e9_kanonymity":      "protection_k_anonymity",
+    "e8_dp":              "protection_dp",
+    "e8b_dp_delta":       "protection_dp_epsilon_delta",
+}
+
+
+def result_dir(experiment):
+    """Directory holding one experiment's records."""
+    return os.path.join(RESULTS_ROOT, RESULT_DIR.get(experiment, experiment))
+
 RUN_CMD = ["python3", "-u", "pipeline/run.py"]
 
 # Results written before this UTC instant predate the 2026-06-23 Stage-6 reveal
@@ -542,8 +567,7 @@ def run_one(run_id, write_results=True):
             pass
 
     if write_results:
-        exp = meta["experiment"]
-        out_dir = os.path.join(RESULTS_ROOT, exp)
+        out_dir = result_dir(meta["experiment"])
         os.makedirs(out_dir, exist_ok=True)
         # Gzipped: the Stage-6 output matrix is mostly padding, so a record
         # compresses by about a hundredfold. eval.utils.load_run reads both forms.
@@ -563,14 +587,9 @@ def aggregate():
         print(f"No results in {RESULTS_ROOT}")
         return
     summary = {}
-    # Only aggregate directories that follow the e1..e8 schema; skip legacy result folders.
-    for exp in sorted(os.listdir(RESULTS_ROOT)):
+    for exp in sorted(set(RESULT_DIR.values())):
         exp_dir = os.path.join(RESULTS_ROOT, exp)
         if not os.path.isdir(exp_dir):
-            continue
-        if not re.match(r"e\d+[a-z]*_", exp):
-            continue
-        if "_OLD_" in exp:
             continue
         rows = []
         dropped = 0
