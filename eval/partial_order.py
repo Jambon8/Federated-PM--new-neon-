@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from eval.baseline import compute_baseline
 from eval.correctness import run_determinism_test
 from eval.utils import save_results, setup_logging
-import import_xes
+from pipeline import import_xes
 
 logger = setup_logging("partial_order")
 

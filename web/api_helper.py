@@ -6,7 +6,7 @@ results. The Flask UI (``app.py``) and the correctness checker
 stays the CLI pretty-printer over the same output.
 
 Only party 0's live output reaches the driver's stdout (see
-``ProgramFiles/MPSPDZClient.py``), so the communication figures parsed here are
+``vendor/ProgramFiles/MPSPDZClient.py``), so the communication figures parsed here are
 party-0 send volumes.
 """
 
@@ -114,7 +114,7 @@ def load_reversal_map(party_indices=None, reveal_all=False):
     if not party_indices and not reveal_all:
         return {}
     try:
-        import decode_output
+        from pipeline import decode_output
     except Exception:
         return {}
     return decode_output.load_reversal_map(party_indices, reveal_all)
@@ -145,8 +145,8 @@ def _timer_names_from_source(program=PROGRAM_NAME):
     keeps output decoding independent of the MPC toolchain being installed, and
     recovers the display names as well as the variable names NEON logs.
     """
-    mpc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "Programs", program + ".mpc")
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mpc_path = os.path.join(project_root, "mpc", program + ".mpc")
     explicit = {}
     variable_to_display = {}
     autotimers = []

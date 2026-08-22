@@ -13,7 +13,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from eval.utils import save_results, load_config, subsample_cases, truncate_traces, setup_logging
-import import_xes
+from pipeline import import_xes
 
 logger = setup_logging("performance")
 
@@ -88,7 +88,7 @@ def run_single_benchmark(log_a, log_b, n_cases=None, max_trace_len=None,
     n_per_party, partial_len = import_xes.encode_and_save(cases_a, cases_b)
 
     cmd = [
-        "python3", "-u", "examples/run_process_mining.py",
+        "python3", "-u", "pipeline/run.py",
         "--log-a", log_a,
         "--log-b", log_b,
         "--threshold", str(threshold),

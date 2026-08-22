@@ -2,27 +2,32 @@ import json
 import os
 import re
 import subprocess
+import sys
 from fractions import Fraction
 
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 
-import api_helper
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+# The repository root for our own packages, and vendor/ for the NEON package.
+sys.path[:0] = [PROJECT_ROOT, os.path.join(PROJECT_ROOT, 'vendor')]
+
+import api_helper  # noqa: E402
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 # Configuration
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 HOME_DIR = os.path.expanduser("~")
 
 # Event logs, activity maps and handover lists (H is one activity per line).
 BROWSABLE_SUFFIXES = ('.xes', '.xes.gz', '.json', '.txt')
 
 # Where the file browser opens: the project's own log collection when present.
-DEFAULT_BROWSE_PATH = (os.path.join(BASE_DIR, "data")
-                       if os.path.isdir(os.path.join(BASE_DIR, "data")) else HOME_DIR)
+DEFAULT_BROWSE_PATH = (os.path.join(PROJECT_ROOT, "data")
+                       if os.path.isdir(os.path.join(PROJECT_ROOT, "data")) else HOME_DIR)
 
-# The delta grammar of examples/run_process_mining.py (_parse_delta): exact
+# The delta grammar of pipeline/run.py (_parse_delta): exact
 # timestamp equality, or a duration carrying an explicit unit.
 DELTA_PATTERN = re.compile(r'^(?:0|[1-9]\d*(?:ms|s|m|h))$')
 DELTA_UNITS = ['ms', 's', 'm', 'h']
@@ -149,7 +154,7 @@ def build_command(data):
         return None, f"Timestamp granularity must be one of {', '.join(GRANULARITIES)}."
 
     cmd = [
-        "python3", "-u", "examples/run_process_mining.py",
+        "python3", "-u", "pipeline/run.py",
         "--logs", *log_paths,
         "--threshold", str(threshold),
         "--threads", str(threads),
@@ -232,7 +237,7 @@ def dp_preview():
         return jsonify({"error": "Epsilon and delta must be numbers."}), 400
 
     try:
-        from ProgramFiles.dp_calibration import calibrate_dp
+        from pipeline.dp_calibration import calibrate_dp
         calibration = calibrate_dp(epsilon, dp_delta)
     except ImportError:
         return jsonify({"error": "DP calibration module unavailable."}), 503
@@ -327,7 +332,7 @@ def run_process_mining():
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,  # Merge stderr into stdout
                 text=True,
-                cwd=BASE_DIR,
+                cwd=PROJECT_ROOT,
                 bufsize=1  # Line buffered
             )
 

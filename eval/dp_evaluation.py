@@ -15,13 +15,13 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from ProgramFiles.dp_calibration import compute_dp_k
+from pipeline.dp_calibration import compute_dp_k
 from eval.correctness import run_mpc_pipeline
 from eval.baseline import compute_baseline
 from eval.performance import run_single_benchmark, _parse_metrics
 from eval.privacy_utility import simulate_dp_noise, compute_emd, _to_distribution
 from eval.utils import save_results, load_config, setup_logging
-import import_xes
+from pipeline import import_xes
 
 logger = setup_logging("dp_evaluation")
 
@@ -99,7 +99,7 @@ def run_dp_correctness_test(log_a, log_b, epsilon=1.0, dp_delta=0.01, threads=16
     baseline = compute_baseline(cases_a, cases_b, threshold=0)
     logger.info(f"Baseline: {len(baseline['variants'])} variants (threshold=0)")
 
-    # MPC with DP (run_process_mining.py overrides the threshold to k + 1,
+    # MPC with DP (pipeline/run.py overrides the threshold to k + 1,
     # realizing the strict release rule "noisy count > k")
     logger.info(f"Running MPC with DP (epsilon={epsilon}, delta={dp_delta}, k={k})...")
     mpc_parsed = run_mpc_pipeline(log_a, log_b, threshold=k, threads=threads,

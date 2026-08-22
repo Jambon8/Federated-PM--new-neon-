@@ -5,22 +5,14 @@ __pycache__/
 
 # Runtime — regenerated on every run
 Player-Data/
-logs/
+vendor/logs/
 
-# MP-SPDZ installation — large binaries, reinstall via: python3 setup.py install-mpspdz
-temp/
-
-# MP-SPDZ compiled program cache — regenerated automatically on first run
-Programs/Source/
-Programs/Bytecode/
-Programs/Schedules/
-Programs/asm/
-
-# Documentation — working notes and the Sphinx project, not part of the artifact
-docs/
+# MP-SPDZ installation — large binaries, reinstall via:
+#   python3 vendor/setup.py install-mpspdz
+vendor/temp/
 
 # NEON debug logging config (auto-generated)
-config/debug_logging.conf
+vendor/config/debug_logging.conf
 
 # Agent config
 .claude/

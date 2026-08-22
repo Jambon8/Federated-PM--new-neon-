@@ -12,8 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from eval.baseline import compute_baseline
 from eval.utils import save_results, load_config, setup_logging
-from ProgramFiles.dp_calibration import compute_dp_k
-import import_xes
+from pipeline.dp_calibration import compute_dp_k
+from pipeline import import_xes
 
 logger = setup_logging("privacy_utility")
 
@@ -66,7 +66,7 @@ def _to_distribution(variants):
 def _sample_ktsgd(k, q, rng):
     """One exact k-TSGD(q, k) draw via inverse-CDF over a uniform variate.
 
-    Mirrors the MPC sampler (Programs/process_mining.mpc, Step 5.5): the
+    Mirrors the MPC sampler (mpc/process_mining.mpc, Step 5.5): the
     marginal is pmf(x) = q^|x| / Z on x in [-k, k] with
     Z = (1 + q - 2 q^(k+1)) / (1 - q), q = e^{-epsilon}. The MPC compares one
     secret 32-bit uniform draw against 2k public CDF thresholds; here a
@@ -85,13 +85,13 @@ def _sample_ktsgd(k, q, rng):
 
 def simulate_dp_noise(variants, epsilon, dp_delta=None, seed=42):
     """Add partition-selection noise to variant counts and apply the release
-    rule, mirroring the MPC DP stage (Programs/process_mining.mpc, Step 5.5).
+    rule, mirroring the MPC DP stage (mpc/process_mining.mpc, Step 5.5).
 
     For (epsilon, delta)-DP: k = compute_dp_k(epsilon, delta); each count gets
     one exact k-TSGD(q, k) draw (q = e^{-epsilon}); the noisy count is clamped
     at 0; a variant is RELEASED iff its noisy count > k. The strict "> k" rule
     (Desfontaines et al., Thm. 6) is what the MPC driver realizes by overriding
-    THRESHOLD = k + 1 (run_process_mining.py).
+    THRESHOLD = k + 1 (pipeline/run.py).
 
     When dp_delta is None, falls back to an untruncated two-sided geometric
     (discrete Laplace) with release count > 0 — a legacy epsilon-DP path not

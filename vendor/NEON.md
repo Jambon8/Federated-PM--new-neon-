@@ -1,14 +1,32 @@
-# NEON
+# Vendored: NEON
 
-`ProgramFiles/` contains the source code of **NEON** (NEtwork simulatiON and benchmarking wrapper), presented in the paper:
-*Estimating the Runtime and Global Network Traffic of SMPC Protocols. (Andreas Klinger, Vincent Ehrmanntraut, and Ulrike Meyer. 2024. CODASPY 2024.)*
+`ProgramFiles/` is **not our code**. It is the source of **NEON** (NEtwork
+simulatiON and benchmarking wrapper), presented in:
 
-NEON allows to easily execute and benchmark SMPC protocols written in [MP-SPDZ](https://github.com/data61/MP-SPDZ) in different network settings.
+> *Estimating the Runtime and Global Network Traffic of SMPC Protocols.*
+> Andreas Klinger, Vincent Ehrmanntraut, and Ulrike Meyer. CODASPY 2024.
 
-The companion runtime estimator XENON from the same paper is not part of this repository; the evaluation in `eval/` measures executions rather than estimating them. Obtain XENON from the authors' original release.
+NEON executes and benchmarks SMPC protocols written in
+[MP-SPDZ](https://github.com/data61/MP-SPDZ) under simulated network settings.
+Everything else in this directory belongs to it too: `config/` holds its
+configuration files, `setup.py` is its MP-SPDZ installer, and `temp/` and
+`logs/` are the directories it creates at runtime. NEON resolves all four
+relative to its own package, which is why they live here rather than at the
+repository root.
 
+MP-SPDZ itself is a third dependency, installed into `temp/MP/` by
+`python3 vendor/setup.py install-mpspdz` and never tracked.
 
-## NEON - NEtwork simulatiON and benchmarking wrapper
+## What we changed
+
+Of NEON's 15 modules, **nine are byte-identical** to the release we received:
+`helper.py`, `__init__.py`, `neonconfig.py`, `network.py`, `operationmode.py`,
+`shamir.py`, `trafficCapture.py`, `virtualnet.py`, and `XIO.py`. Six files
+carry the patches listed below. Nothing else in the repository is vendor code —
+`dp_calibration.py` used to sit in this package and now lives in `pipeline/`,
+where it belongs.
+
+## About NEON
 
 NEON (NEtwork simulatiON and benchmarking wrapper) is a framework that acts as a wrapper for [MP-SPDZ](https://github.com/data61/MP-SPDZ).
 It allows to perform benchmarks of protocol executions. Main features are:
@@ -44,9 +62,10 @@ If you want to use the MP-SPDZ git (non-release) version which requires compilat
 
 ---
 
-# Changes Made to the NEON Library
+# Patches
 
-The following patches were applied to the NEON library (`ProgramFiles/`) to support the process mining application.
+Six files diverge from the release. Each patch is listed with what changed and
+why.
 
 ## `ProgramFiles/protocol.py` — Restored `Semi` domain to `Domain.BINARY`
 
@@ -82,6 +101,35 @@ The new library removed `compile_looping` and `direct` from `smpc()`. They were 
 
 **Why:** `--direct` enables direct party-to-party communication instead of routing through a coordinator, reducing latency in LAN environments.
 
+## `ProgramFiles/programhandler.py` — Configurable program directory
+
+Upstream resolves `.mpc` sources as `<package>/../Programs/<name>.mpc`, in eight
+places. A new `ProgramHandler.program_dir()` method centralizes that resolution
+and points it at `<repository root>/mpc` instead.
+
+**Why:** vendoring this package one level deeper would otherwise drag the MPC
+program into `vendor/`, and the MPC program is the thesis contribution, not
+vendor code. The program hash is computed over the file's *contents* plus the
+protocol domain, never its path, so relocating the source leaves every
+previously compiled binary valid.
+
+## `ProgramFiles/computationreport.py` — Robustness and formatting
+
+Adds a `JSONDecodeError` import and corrects indentation on a mis-indented
+region marker and a field annotation. Behavior is otherwise unchanged.
+
+## `setup.py` — Prebuilt MP-SPDZ toolchain
+
+`tools_to_compile` changed from `["cmake", "boost", "libote", "mpir", "tldr"]` to
+`["setup"]`.
+
+**Why:** the release we target ships prebuilt binaries, so compiling the
+supporting tools from source is unnecessary and fails on some distributions.
+
+A second change adds `sys.path.insert(0, <this directory>)` before the
+`ProgramFiles` imports, so the installer runs as `python3 vendor/setup.py`
+from the repository root.
+
 ---
 
 # Disclaimer
@@ -89,5 +137,12 @@ Use at your own risk.
 
 
 # Licenses
-NEON uses and relies on the secure multi-party computation benchmarking framework MP-SPDZ listed in the following:
+
+The release we received carried no license file; its own license note covers
+only its MP-SPDZ dependency, reproduced here:
+
 - MP-SPDZ: copyright (c) 2023, Commonwealth Scientific and Industrial Research Organisation (CSIRO) ABN 41 687 119 230. See https://github.com/data61/MP-SPDZ/blob/v0.3.6/License.txt for details.
+
+The repository-wide [LICENSE.txt](../LICENSE.txt) (GPL-3.0) is ours and covers
+our own code. The terms for the code in this directory are to be confirmed with
+its authors.

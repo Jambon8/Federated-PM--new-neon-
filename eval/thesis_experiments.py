@@ -27,7 +27,7 @@ from datetime import datetime
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 RESULTS_ROOT = os.environ.get("NEON_RESULTS_ROOT", os.path.join(PROJECT_ROOT, "eval_results"))
-RUN_CMD = ["python3", "-u", "examples/run_process_mining.py"]
+RUN_CMD = ["python3", "-u", "pipeline/run.py"]
 
 # Results written before this UTC instant predate the 2026-06-23 Stage-6 reveal
 # changes (commits 533bde9 at 09:52Z and 70e5de9 at 10:09Z); their timings are
@@ -139,7 +139,7 @@ def _runs_e2_threads(reps=5):
 
 
 def _runs_e3_scaling_input(reps=3):
-    """E3: scaling in input size. Uses run_process_mining.py --n-per-party-cap to
+    """E3: scaling in input size. Uses pipeline/run.py --n-per-party-cap to
     subsample case IDs deterministically before encoding."""
     out = []
     # Three datasets per the locked plan; bpi17_offer added as the large anchor.

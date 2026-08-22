@@ -1,7 +1,12 @@
 import unittest
 from decimal import Decimal
 
-from ProgramFiles.dp_calibration import (
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from pipeline.dp_calibration import (
     calibrate_dp,
     cdf_thresholds,
     grid_tv_bound,

@@ -36,6 +36,15 @@ class ProgramHandler:
         self.config.local_mpspdz_path = config.local_mpspdz_path
         self.cdir = get_cdir()
 
+    def program_dir(self, *parts: str) -> str:
+        """Directory holding the .mpc sources.
+
+        Upstream NEON resolves this as ``<package>/../Programs``. This copy is
+        vendored one level deeper, and the MPC program is not vendor code, so
+        the sources live at ``<repository root>/mpc`` instead.
+        """
+        return join_path_abs(self.cdir, '..', '..', 'mpc', *parts)
+
     def compile_program_if_necessary(self, program: str, protocol: Protocol, compile_debug, compile_looping=False) -> str:
         """Compiles the program locally if necessary and returns the program's hash."""
         # Some are binary circuits only and need different compilation
@@ -54,14 +63,14 @@ class ProgramHandler:
                                 compile_debug, compile_looping=False):
         """Compiles the program locally."""
         try:
-            shutil.copyfile(join_path_abs(self.cdir, '..', 'Programs', program + '.mpc'),
+            shutil.copyfile(self.program_dir(program + '.mpc'),
                             join_path_abs(self.config.local_mpspdz_path, 'Programs', 'Source', program_hash + '.mpc'))
             # Delete the temporary file
             self.delete_temporary_program(program)
             if len(dependencies) > 0:
                 os.makedirs(join_path_abs(self.config.local_mpspdz_path, 'Dependencies'), exist_ok=True)
             for dependency in dependencies:
-                shutil.copyfile(join_path_abs(self.cdir, '..', 'Programs', 'Dependencies', dependency),
+                shutil.copyfile(self.program_dir('Dependencies', dependency),
                                 join_path_abs(self.config.local_mpspdz_path, 'Dependencies', dependency))
         except Exception as err:
             self.exit_after_error("Cannot copy program to destination location", err, program_hash)
@@ -143,7 +152,7 @@ class ProgramHandler:
         used_timers = []
 
         # Go over the program and try to determine the used timers as well as specified timer names.
-        with open(join_path_abs(self.cdir, '..', 'Programs', program + '.mpc'), 'r') as f:
+        with open(self.program_dir(program + '.mpc'), 'r') as f:
             for line in f.readlines():
                 line = line.lstrip('\t ').rstrip('\n\r')
 
@@ -216,7 +225,7 @@ class ProgramHandler:
         dependencies = self.get_dependencies_for_program(program)
         logger.info("Program has the following dependencies: {}".format(dependencies))
 
-        with open(join_path_abs(self.cdir, '../Programs', program + '.mpc'), 'rb') as f:
+        with open(self.program_dir(program + '.mpc'), 'rb') as f:
             new_code = f.read()
 
         # Change hash depending on the domain (and possibly other parameters) that it needs
@@ -224,7 +233,7 @@ class ProgramHandler:
             new_code += str(protocol.domain.name).encode('utf-8')
 
         for dependency in sorted(list(dependencies)):
-            with open(join_path_abs(self.cdir, "../Programs/Dependencies", dependency), 'rb') as f:
+            with open(self.program_dir('Dependencies', dependency), 'rb') as f:
                 new_code += f.read()
 
         return hashlib.blake2s(new_code).digest()
@@ -251,7 +260,7 @@ class ProgramHandler:
         new_files.add("../" + program + '.mpc')
         next_round_new_files = set()
 
-        dependendencies_folder = join_path_abs(self.cdir, '..', 'Programs', 'Dependencies')
+        dependendencies_folder = self.program_dir('Dependencies')
 
         def try_add(file):
             if os.path.isfile(join_path_abs(dependendencies_folder, file)):
@@ -294,11 +303,11 @@ class ProgramHandler:
         """Performs the substituions that were set with set_substitution, returns the filename of the resulting temporary program."""
 
         # create temp file
-        file_handler_id, temp_file = tempfile.mkstemp(suffix=".mpc", dir=join_path_abs(self.cdir, '../Programs'))
+        file_handler_id, temp_file = tempfile.mkstemp(suffix=".mpc", dir=self.program_dir())
         # Manually close the file. Must be done, as otherwise the temporary file will be always open, and thus can cause the "too many open files" error.
         os.close(file_handler_id)
         # Find and replace
-        with open(self.cdir + '/../Programs/' + program + '.mpc', 'r') as f:
+        with open(self.program_dir(program + '.mpc'), 'r') as f:
             filedata = f.read()
         for k, v in find_and_replace.items():
             filedata = filedata.replace(k, v)
@@ -309,7 +318,7 @@ class ProgramHandler:
 
     def delete_temporary_program(self, temp_program: str):
         """delete the temporary program from the substitution after it has been compiled"""
-        os.remove(join_path_abs(self.cdir, '../Programs', temp_program + '.mpc'))
+        os.remove(self.program_dir(temp_program + '.mpc'))
 
     def exit_after_error(self, error, original_error, program_hash: str):
         """In case of an error this function gives feedback and deletes

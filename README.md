@@ -1,6 +1,6 @@
 # Privacy-Aware Federated Process Mining
 
-Secure multi-party computation of trace variants over event logs held by two or more organizations, built on the [NEON](README_NEON.md) framework on top of MP-SPDZ.
+Secure multi-party computation of trace variants over event logs held by two or more organizations, built on the [NEON](vendor/NEON.md) framework on top of MP-SPDZ.
 
 Each party holds a private event log (XES). The protocol jointly computes the trace variants the parties share and their frequencies, without any party learning another's raw log. The same parameterized pipeline runs for every party count N ≥ 2.
 
@@ -16,10 +16,10 @@ This is the implementation artifact of a master's thesis at the [PADS](https://w
 - `pm4py`, `scipy`, `pandas`, `matplotlib` — evaluation harness and figures only
 - MP-SPDZ 0.4.2
 
-MP-SPDZ is not vendored. Install it into `temp/MP/mp-spdz-0.4.2/` with:
+MP-SPDZ is not vendored. Install it into `vendor/temp/MP/mp-spdz-0.4.2/` with:
 
 ```bash
-python3 setup.py install-mpspdz
+python3 vendor/setup.py install-mpspdz
 ```
 
 ---
@@ -29,7 +29,7 @@ python3 setup.py install-mpspdz
 **Always run from the repository root.**
 
 ```bash
-python3 examples/run_process_mining.py \
+python3 pipeline/run.py \
   --log-a data/2parties/bpi13_open/party_0.xes.gz \
   --log-b data/2parties/bpi13_open/party_1.xes.gz
 ```
@@ -37,7 +37,7 @@ python3 examples/run_process_mining.py \
 For more than two parties, pass one log per party:
 
 ```bash
-python3 examples/run_process_mining.py --logs \
+python3 pipeline/run.py --logs \
   data/3parties/bpi13_open/party_0.xes \
   data/3parties/bpi13_open/party_1.xes \
   data/3parties/bpi13_open/party_2.xes
@@ -91,19 +91,19 @@ The default regime filters on frequency. Differential privacy is an optional str
 
 ```bash
 # k-anonymity at k = 5
-python3 examples/run_process_mining.py \
+python3 pipeline/run.py \
   --log-a data/2parties/sepsis/party_0.xes.gz \
   --log-b data/2parties/sepsis/party_1.xes.gz \
   --threshold 5 --k-anon 1
 
 # (eps, delta)-differentially private release
-python3 examples/run_process_mining.py \
+python3 pipeline/run.py \
   --log-a data/2parties/sepsis/party_0.xes.gz \
   --log-b data/2parties/sepsis/party_1.xes.gz \
   --enable-dp 1 --epsilon 1.0 --dp-delta 0.001
 
 # Simulated WAN
-sudo -E python3 examples/run_process_mining.py \
+sudo -E python3 pipeline/run.py \
   --log-a data/2parties/requestforpayment/party_0.xes.gz \
   --log-b data/2parties/requestforpayment/party_1.xes.gz \
   --mode local-virtual --network wan-fast
@@ -114,7 +114,7 @@ sudo -E python3 examples/run_process_mining.py \
 ## Running the web UI
 
 ```bash
-python3 app.py
+python3 web/app.py
 ```
 
 Open `http://localhost:8000`. The UI exposes the same options as the CLI, browses for log files, and streams output live.
@@ -128,8 +128,8 @@ The run prints the activity decoder ring mapping integer identifiers to activity
 To decode raw MP-SPDZ output:
 
 ```bash
-python3 decode_output.py <output_file>
-some_command | python3 decode_output.py
+python3 pipeline/decode_output.py <output_file>
+some_command | python3 pipeline/decode_output.py
 ```
 
 ---
@@ -177,23 +177,38 @@ python3 -m unittest discover -s tests
 
 ## File structure
 
+Our contribution and the vendored dependencies are separated at the top level:
+everything under `vendor/` was written by someone else.
+
 ```
 .
-├── examples/run_process_mining.py   # Main entry point
-├── Programs/process_mining.mpc      # MPC program (6-stage pipeline)
-├── import_xes.py                    # XES parser + MPC input encoder
-├── decode_output.py                 # CLI output decoder
-├── app.py, api_helper.py            # Flask web server and output parsing
-├── templates/, static/              # Web UI
-├── ProgramFiles/                    # NEON library (see README_NEON.md)
-│   └── dp_calibration.py            # (eps, delta) -> threshold calibration
+├── mpc/process_mining.mpc           # The MPC program: six-stage pipeline
+├── pipeline/                        # One run, end to end
+│   ├── run.py                       #   entry point: configure, compile, execute
+│   ├── import_xes.py                #   XES parser + MPC input encoder
+│   ├── decode_output.py             #   release decoder (CLI)
+│   ├── dp_calibration.py            #   (eps, delta) -> threshold calibration
+│   └── generate_test_data.py        #   N-party splits from one log
+├── web/                             # Browser tool
+│   ├── app.py, api_helper.py        #   Flask server and output parsing
+│   └── templates/, static/
 ├── eval/                            # Experiment registry, runners, plotting
 ├── tests/                           # Unit tests
 ├── data/<n>parties/<dataset>/       # Event logs, one per party
-├── setup.py                         # MP-SPDZ installation
-├── temp/MP/mp-spdz-0.4.2/           # MP-SPDZ (installed, not tracked)
+├── docs/                            # Design notes behind Chapters 4 and 5
+│
+├── vendor/                          # Not ours — see vendor/NEON.md
+│   ├── ProgramFiles/                #   NEON (Klinger et al., CODASPY 2024)
+│   ├── config/                      #   NEON configuration
+│   ├── setup.py                     #   NEON's MP-SPDZ installer
+│   ├── temp/MP/mp-spdz-0.4.2/       #   MP-SPDZ (installed, not tracked)
+│   └── logs/                        #   NEON run archives (not tracked)
+│
 └── Player-Data/                     # Runtime I/O (inputs, outputs, keys)
 ```
+
+Nine of NEON's fifteen modules are byte-identical to the release we received;
+the six that differ are documented patch by patch in [vendor/NEON.md](vendor/NEON.md).
 
 ---
 

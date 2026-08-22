@@ -35,7 +35,7 @@ from datetime import datetime, timedelta, timezone
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
-import import_xes  # noqa: E402
+from pipeline import import_xes  # noqa: E402
 
 SEED = 42
 C_CASES = 500

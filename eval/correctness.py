@@ -11,8 +11,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from eval.baseline import compute_baseline
 from eval.utils import save_results, setup_logging
-import import_xes
-import api_helper
+from pipeline import import_xes
+from web import api_helper
 
 logger = setup_logging("correctness")
 
@@ -26,7 +26,7 @@ def run_mpc_pipeline(log_a, log_b, threshold=1, k_anon=0, partial_orders=0,
                      threads=16, enable_dp=0, epsilon=1.0, dp_delta=0.01):
     """Run the MPC pipeline via subprocess and parse output."""
     cmd = [
-        "python3", "-u", "examples/run_process_mining.py",
+        "python3", "-u", "pipeline/run.py",
         "--log-a", log_a,
         "--log-b", log_b,
         "--threshold", str(threshold),

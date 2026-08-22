@@ -52,7 +52,7 @@ echo
 
 # (1) Initial cleanup — kill any stale netns from previous attempts.
 echo "[$(date +%H:%M:%S)] cleaning stale namespaces…"
-python3 setup.py clean-virtual 2>/dev/null || true
+python3 vendor/setup.py clean-virtual 2>/dev/null || true
 ip netns 2>/dev/null | grep '^neon_ns' | xargs -r -I{} ip netns del {} || true
 
 # (2) Regenerate the E7 commands list — skipping runs already on disk with rc=0.

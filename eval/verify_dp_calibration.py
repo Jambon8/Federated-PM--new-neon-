@@ -11,7 +11,7 @@ from decimal import Decimal, localcontext
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from ProgramFiles.dp_calibration import (  # noqa: E402
+from pipeline.dp_calibration import (  # noqa: E402
     calibrate_dp,
     cdf_thresholds,
     ideal_dp_k,

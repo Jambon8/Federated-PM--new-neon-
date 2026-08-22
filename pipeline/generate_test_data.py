@@ -138,7 +138,7 @@ def main():
     paths = split_xes(args.input, args.parties, args.overlap, args.output_dir, args.seed)
 
     print(f"\nTo run {args.parties}-party MPC:")
-    print(f"  python3 examples/run_process_mining.py --logs {' '.join(paths)} --threads 16")
+    print(f"  python3 pipeline/run.py --logs {' '.join(paths)} --threads 16")
 
 
 if __name__ == "__main__":

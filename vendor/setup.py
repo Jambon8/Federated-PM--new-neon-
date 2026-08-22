@@ -12,6 +12,8 @@ import requests
 from tqdm import tqdm, trange
 from multiprocessing.pool import ThreadPool
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from ProgramFiles.helper import get_cdir, get_logger, get_path_to_mpspdz, generate_party_certificate, rehash_certificates, join_path_abs, NeonException
 from ProgramFiles.neonconfig import NeonConfig
 from ProgramFiles.virtualnet import VirtualNetworkManager

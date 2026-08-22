@@ -30,7 +30,7 @@ def _parse_delta(s):
         raise argparse.ArgumentTypeError(f"Invalid delta '{s}'. Use: 0 (exact equality), 500ms, 10s, 1m, 2h")
     value, unit = int(m.group(1)), m.group(2)
     return value * _GRANULARITY_MS[unit]
-import import_xes
+from pipeline import import_xes
 
 PAD_ID = 2**60
 PAD_TIME = 2**60

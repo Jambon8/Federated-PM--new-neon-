@@ -3,8 +3,9 @@ import sys
 import subprocess
 import logging
 
-# Add parent directory to path to find ProgramFiles
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The repository root for our own packages, and vendor/ for the NEON package.
+sys.path[:0] = [PROJECT_ROOT, os.path.join(PROJECT_ROOT, 'vendor')]
 
 from ProgramFiles.operationmode import OperationMode
 from ProgramFiles.neonconfig import NeonConfig
@@ -20,7 +21,7 @@ import argparse
 import importlib.util
 from fractions import Fraction
 
-from ProgramFiles.dp_calibration import calibrate_dp, compute_dp_k
+from pipeline.dp_calibration import calibrate_dp, compute_dp_k
 
 _GRANULARITY_MS = {'ms': 1, 's': 1000, 'm': 60_000, 'h': 3_600_000}
 
@@ -113,14 +114,11 @@ def main():
 
     os.makedirs("Player-Data", exist_ok=True)
 
-    import_path = f"./{script_name}"
+    # The importer sits next to this runner, so it resolves independently of the
+    # working directory.
+    import_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), script_name)
     if not os.path.exists(import_path):
-        if os.path.exists(f"Programs/{script_name}"):
-            import_path = f"Programs/{script_name}"
-        elif os.path.exists(f"Programs/Source/{script_name}"):
-            import_path = f"Programs/Source/{script_name}"
-        else:
-            raise FileNotFoundError(f"Could not find {script_name}")
+        raise FileNotFoundError(f"Could not find {import_path}")
 
     importer = import_source_file(import_path, module_name)
 
