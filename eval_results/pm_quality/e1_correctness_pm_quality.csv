@@ -1,0 +1,9 @@
+compare_baseline,dataset,emd,error,experiment,fitness,precision,run_id,variants_released
+True,bpi12,2682.0496988047153,,e1_correctness,0.8468411734648217,0.3452153649552733,e1__bpi12__default__rep0,4342
+True,bpi13_incidents,413.6630769784977,,e1_correctness,1.0,0.7275594408806283,e1__bpi13_incidents__default__rep0,1507
+True,bpi17_offer,15.81151340952986,,e1_correctness,0.7792721119976783,0.9996446850810033,e1__bpi17_offer__default__rep0,16
+True,domestic_decl,93.34567936413136,,e1_correctness,0.9975503034534505,0.2752117230164772,e1__domestic_decl__default__rep0,67
+True,hospital,936.4331921336361,TimeoutError_: exceeded 300s,e1_correctness,,,e1__hospital__default__rep0,1013
+True,permit,381.8150855920052,,e1_correctness,0.48842875853480083,0.0,e1__permit__default__rep0,1295
+True,requestforpayment,56.66520987917251,,e1_correctness,0.9968051118210853,0.2586580086580087,e1__requestforpayment__default__rep0,75
+True,sepsis,301.24226600984707,,e1_correctness,1.0,0.29187444998533296,e1__sepsis__default__rep0,731

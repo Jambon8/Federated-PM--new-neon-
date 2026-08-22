@@ -1,0 +1,210 @@
+{
+  "method": "Direct reconstruction from every generated party log: intersect case identifiers, union each shared case's events, sort by (timestamp, public activity identifier), and compare the complete trace--count map with every stored E4b release.",
+  "datasets": {
+    "bpi13_incidents": {
+      "2": {
+        "centralized_variants": 248,
+        "centralized_cases": 500,
+        "same_joint_release_as_n2": true,
+        "repetitions": [
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N2__rep0.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N2__rep1.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N2__rep2.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          }
+        ]
+      },
+      "3": {
+        "centralized_variants": 248,
+        "centralized_cases": 500,
+        "same_joint_release_as_n2": true,
+        "repetitions": [
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N3__rep0.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N3__rep1.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N3__rep2.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          }
+        ]
+      },
+      "4": {
+        "centralized_variants": 248,
+        "centralized_cases": 500,
+        "same_joint_release_as_n2": true,
+        "repetitions": [
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N4__rep0.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N4__rep1.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N4__rep2.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          }
+        ]
+      },
+      "5": {
+        "centralized_variants": 248,
+        "centralized_cases": 500,
+        "same_joint_release_as_n2": true,
+        "repetitions": [
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N5__rep0.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N5__rep1.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__bpi13_incidents__N5__rep2.json",
+            "match": true,
+            "stored_variants": 248,
+            "stored_cases": 500
+          }
+        ]
+      }
+    },
+    "sepsis": {
+      "2": {
+        "centralized_variants": 368,
+        "centralized_cases": 500,
+        "same_joint_release_as_n2": true,
+        "repetitions": [
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N2__rep0.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N2__rep1.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N2__rep2.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          }
+        ]
+      },
+      "3": {
+        "centralized_variants": 368,
+        "centralized_cases": 500,
+        "same_joint_release_as_n2": true,
+        "repetitions": [
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N3__rep0.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N3__rep1.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N3__rep2.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          }
+        ]
+      },
+      "4": {
+        "centralized_variants": 368,
+        "centralized_cases": 500,
+        "same_joint_release_as_n2": true,
+        "repetitions": [
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N4__rep0.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N4__rep1.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N4__rep2.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          }
+        ]
+      },
+      "5": {
+        "centralized_variants": 368,
+        "centralized_cases": 500,
+        "same_joint_release_as_n2": true,
+        "repetitions": [
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N5__rep0.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N5__rep1.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          },
+          {
+            "result": "eval_results/e4b_scaling_n/e4b__sepsis__N5__rep2.json",
+            "match": true,
+            "stored_variants": 368,
+            "stored_cases": 500
+          }
+        ]
+      }
+    }
+  },
+  "all_match": true
+}

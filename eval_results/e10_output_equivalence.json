@@ -1,0 +1,89 @@
+{
+  "datasets": {
+    "bpi13_open": {
+      "files": {
+        "semi": [
+          "eval_results/e10_protocols/e10__bpi13_open__semi__rep0.json",
+          "eval_results/e10_protocols/e10__bpi13_open__semi__rep1.json",
+          "eval_results/e10_protocols/e10__bpi13_open__semi__rep2.json"
+        ],
+        "rep_bin": [
+          "eval_results/e10_protocols/e10__bpi13_open__rep_bin__rep0.json",
+          "eval_results/e10_protocols/e10__bpi13_open__rep_bin__rep1.json",
+          "eval_results/e10_protocols/e10__bpi13_open__rep_bin__rep2.json"
+        ]
+      },
+      "variants": 72,
+      "within_protocol_repetitions_match": {
+        "semi": true,
+        "rep_bin": true
+      },
+      "semi_equals_rep_bin": true,
+      "match": true
+    },
+    "bpi13_closed": {
+      "files": {
+        "semi": [
+          "eval_results/e10_protocols/e10__bpi13_closed__semi__rep0.json",
+          "eval_results/e10_protocols/e10__bpi13_closed__semi__rep1.json",
+          "eval_results/e10_protocols/e10__bpi13_closed__semi__rep2.json"
+        ],
+        "rep_bin": [
+          "eval_results/e10_protocols/e10__bpi13_closed__rep_bin__rep0.json",
+          "eval_results/e10_protocols/e10__bpi13_closed__rep_bin__rep1.json",
+          "eval_results/e10_protocols/e10__bpi13_closed__rep_bin__rep2.json"
+        ]
+      },
+      "variants": 71,
+      "within_protocol_repetitions_match": {
+        "semi": true,
+        "rep_bin": true
+      },
+      "semi_equals_rep_bin": true,
+      "match": true
+    },
+    "sepsis": {
+      "files": {
+        "semi": [
+          "eval_results/e10_protocols/e10__sepsis__semi__rep0.json",
+          "eval_results/e10_protocols/e10__sepsis__semi__rep1.json",
+          "eval_results/e10_protocols/e10__sepsis__semi__rep2.json"
+        ],
+        "rep_bin": [
+          "eval_results/e10_protocols/e10__sepsis__rep_bin__rep0.json",
+          "eval_results/e10_protocols/e10__sepsis__rep_bin__rep1.json",
+          "eval_results/e10_protocols/e10__sepsis__rep_bin__rep2.json"
+        ]
+      },
+      "variants": 885,
+      "within_protocol_repetitions_match": {
+        "semi": true,
+        "rep_bin": true
+      },
+      "semi_equals_rep_bin": true,
+      "match": true
+    },
+    "bpi13_incidents": {
+      "files": {
+        "semi": [
+          "eval_results/e10_protocols/e10__bpi13_incidents__semi__rep0.json",
+          "eval_results/e10_protocols/e10__bpi13_incidents__semi__rep1.json",
+          "eval_results/e10_protocols/e10__bpi13_incidents__semi__rep2.json"
+        ],
+        "rep_bin": [
+          "eval_results/e10_protocols/e10__bpi13_incidents__rep_bin__rep0.json",
+          "eval_results/e10_protocols/e10__bpi13_incidents__rep_bin__rep1.json",
+          "eval_results/e10_protocols/e10__bpi13_incidents__rep_bin__rep2.json"
+        ]
+      },
+      "variants": 679,
+      "within_protocol_repetitions_match": {
+        "semi": true,
+        "rep_bin": true
+      },
+      "semi_equals_rep_bin": true,
+      "match": true
+    }
+  },
+  "all_match": true
+}

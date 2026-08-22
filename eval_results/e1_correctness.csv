@@ -1,0 +1,12 @@
+compare_baseline,dataset,experiment,global_data_mb,n_parties,others_below_threshold,party0_data_mb,rc,run_id,runtime_s,total_rounds,variants_released,wall_s
+True,bpi12,e1_correctness,83148.6,2,,41574.3,0,e1__bpi12__default__rep0,100.188,24463758,3792,2463.618758916855
+True,bpi13_closed,e1_correctness,1704.36,2,,852.181,0,e1__bpi13_closed__default__rep0,4.75166,1740380,182,60.56587600708008
+True,bpi13_incidents,e1_correctness,30666.8,2,,15333.4,0,e1__bpi13_incidents__default__rep0,35.5433,10814911,1507,914.5315556526184
+True,bpi13_open,e1_correctness,640.527,2,,320.264,0,e1__bpi13_open__default__rep0,2.73929,754738,104,30.205107927322388
+True,bpi17_offer,e1_correctness,35059.0,2,,17529.5,0,e1__bpi17_offer__default__rep0,136.83,89954006,16,975.1566712856293
+True,domestic_decl,e1_correctness,18480.4,2,,9240.22,0,e1__domestic_decl__default__rep0,40.0862,19359916,66,514.3278403282166
+True,hospital,e1_correctness,82574.1,2,,41287.1,0,e1__hospital__default__rep0,112.277,6326947,974,3389.567888021469
+True,international_decl,e1_correctness,9372.99,2,,4686.5,0,e1__international_decl__default__rep0,85.7341,9022925,792,346.8838858604431
+True,permit,e1_correctness,37379.4,2,,18689.7,0,e1__permit__default__rep0,47.3249,11354728,1303,1058.4734909534454
+True,requestforpayment,e1_correctness,8031.45,2,,4015.72,0,e1__requestforpayment__default__rep0,18.5268,8939571,74,225.29851579666138
+True,sepsis,e1_correctness,13634.5,2,,6817.25,0,e1__sepsis__default__rep0,19.7074,2469655,690,586.9638116359711

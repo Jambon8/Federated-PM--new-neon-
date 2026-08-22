@@ -1,0 +1,248 @@
+{
+  "generator": "generate_test_data.py",
+  "seed": 42,
+  "assignment": "Shuffle source-case indices; put floor(overlap * cases) cases in every party; assign the remainder round-robin. Shared-case events are distributed round-robin by source event index.",
+  "datasets": {
+    "bpi13_open": {
+      "source_traces": 819,
+      "overlap_fraction": 0.5,
+      "party_counts": {
+        "3": {
+          "file_traces_per_party": [
+            546,
+            546,
+            545
+          ],
+          "encoded_nonempty_cases_per_party": [
+            546,
+            466,
+            303
+          ],
+          "encoded_partial_len": 15,
+          "effective_shared_cases": 167,
+          "effective_union_cases": 819,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        },
+        "4": {
+          "file_traces_per_party": [
+            512,
+            512,
+            511,
+            511
+          ],
+          "encoded_nonempty_cases_per_party": [
+            512,
+            432,
+            269,
+            211
+          ],
+          "encoded_partial_len": 15,
+          "effective_shared_cases": 109,
+          "effective_union_cases": 819,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        },
+        "5": {
+          "file_traces_per_party": [
+            491,
+            491,
+            491,
+            491,
+            491
+          ],
+          "encoded_nonempty_cases_per_party": [
+            491,
+            411,
+            249,
+            191,
+            147
+          ],
+          "encoded_partial_len": 15,
+          "effective_shared_cases": 65,
+          "effective_union_cases": 819,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        }
+      }
+    },
+    "bpi13_closed": {
+      "source_traces": 1487,
+      "overlap_fraction": 0.5,
+      "party_counts": {
+        "3": {
+          "file_traces_per_party": [
+            991,
+            991,
+            991
+          ],
+          "encoded_nonempty_cases_per_party": [
+            858,
+            675,
+            469
+          ],
+          "encoded_partial_len": 18,
+          "effective_shared_cases": 251,
+          "effective_union_cases": 1303,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        },
+        "4": {
+          "file_traces_per_party": [
+            929,
+            929,
+            929,
+            929
+          ],
+          "encoded_nonempty_cases_per_party": [
+            808,
+            611,
+            415,
+            317
+          ],
+          "encoded_partial_len": 18,
+          "effective_shared_cases": 149,
+          "effective_union_cases": 1303,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        },
+        "5": {
+          "file_traces_per_party": [
+            892,
+            892,
+            892,
+            892,
+            891
+          ],
+          "encoded_nonempty_cases_per_party": [
+            783,
+            580,
+            374,
+            287,
+            200
+          ],
+          "encoded_partial_len": 18,
+          "effective_shared_cases": 73,
+          "effective_union_cases": 1303,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        }
+      }
+    },
+    "bpi13_incidents": {
+      "source_traces": 7554,
+      "overlap_fraction": 0.5,
+      "party_counts": {
+        "3": {
+          "file_traces_per_party": [
+            5036,
+            5036,
+            5036
+          ],
+          "encoded_nonempty_cases_per_party": [
+            4840,
+            4307,
+            3552
+          ],
+          "encoded_partial_len": 59,
+          "effective_shared_cases": 2345,
+          "effective_union_cases": 7262,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        },
+        "4": {
+          "file_traces_per_party": [
+            4722,
+            4721,
+            4721,
+            4721
+          ],
+          "encoded_nonempty_cases_per_party": [
+            4544,
+            3998,
+            3250,
+            2618
+          ],
+          "encoded_partial_len": 59,
+          "effective_shared_cases": 1711,
+          "effective_union_cases": 7262,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        },
+        "5": {
+          "file_traces_per_party": [
+            4533,
+            4533,
+            4532,
+            4532,
+            4532
+          ],
+          "encoded_nonempty_cases_per_party": [
+            4367,
+            3814,
+            3070,
+            2439,
+            2002
+          ],
+          "encoded_partial_len": 59,
+          "effective_shared_cases": 1282,
+          "effective_union_cases": 7262,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        }
+      }
+    },
+    "sepsis": {
+      "source_traces": 1050,
+      "overlap_fraction": 1.0,
+      "party_counts": {
+        "3": {
+          "file_traces_per_party": [
+            1050,
+            1050,
+            1050
+          ],
+          "encoded_nonempty_cases_per_party": [
+            1043,
+            1000,
+            935
+          ],
+          "encoded_partial_len": 28,
+          "effective_shared_cases": 935,
+          "effective_union_cases": 1043,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        },
+        "4": {
+          "file_traces_per_party": [
+            1050,
+            1050,
+            1050,
+            1050
+          ],
+          "encoded_nonempty_cases_per_party": [
+            1043,
+            1000,
+            935,
+            856
+          ],
+          "encoded_partial_len": 21,
+          "effective_shared_cases": 856,
+          "effective_union_cases": 1043,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        },
+        "5": {
+          "file_traces_per_party": [
+            1050,
+            1050,
+            1050,
+            1050,
+            1050
+          ],
+          "encoded_nonempty_cases_per_party": [
+            1043,
+            1000,
+            935,
+            856,
+            752
+          ],
+          "encoded_partial_len": 17,
+          "effective_shared_cases": 752,
+          "effective_union_cases": 1043,
+          "raw_trace_assignment_matches_seed_42_generator": true
+        }
+      }
+    }
+  },
+  "all_raw_trace_assignments_match": true
+}

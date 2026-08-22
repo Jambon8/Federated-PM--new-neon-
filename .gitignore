@@ -43,9 +43,18 @@ data/
 /*.synctex.gz
 /*.toc
 
-# Evaluation — the harness is tracked; measurements and generated
-# command lists are not. Results are written to eval_results/.
-eval_results/
+# Evaluation. The aggregated results the thesis reports are tracked: one CSV
+# per experiment, the verifier outputs, the provenance manifest, and the
+# generated figure data. The raw per-run JSONs behind them are not — they run
+# to several gigabytes.
+eval_results/*
+!eval_results/*.csv
+!eval_results/*.json
+!eval_results/pm_quality/
+!eval_results/scaling_plots/
+!eval_results/stage_breakdown/
+
+# Generated command lists
 eval/commands*.txt
 
 # Cluster orchestration. The published harness targets local execution;

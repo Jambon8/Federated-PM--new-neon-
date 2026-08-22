@@ -215,9 +215,18 @@ Standalone drivers exist for individual studies outside the registry:
 `eval/baseline.py`), `eval/dp_evaluation.py` (DP correctness, statistics, cost),
 and `eval/privacy_utility.py` (privacy-utility trade-off over an epsilon grid).
 
-`eval_results/ch6_provenance_manifest.json` records the SHA-256 of every input
-log, run result, and verifier output behind the evaluation chapter. Regenerate
-it with `python3 eval/write_ch6_provenance.py`.
+### What is tracked
+
+The aggregated results the thesis reports are in the repository: one CSV per
+experiment, the verifier outputs, the generated figure data under
+`eval_results/{pm_quality,scaling_plots,stage_breakdown}/`, and
+`eval_results/ch6_provenance_manifest.json`, which records the SHA-256 of every
+input log, run result, and verifier output behind the evaluation chapter.
+Regenerate the manifest with `python3 eval/write_ch6_provenance.py`.
+
+Every number in the evaluation tables and figures is reproducible from those
+CSVs. The raw per-run JSONs they aggregate are not tracked; re-running an
+experiment regenerates them.
 
 ---
 
