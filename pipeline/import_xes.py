@@ -131,40 +131,11 @@ def _validate_handover_contract(cases_list):
 
 # --- Global handover list H (public, applied identically by every party) ---
 # An activity is a handover (boundary) event iff it belongs to the single
-# global list H. Both parties apply the same H, so a trace shared by both
-# collapses identically on every side and the PSI match is preserved. In
-# deployment H is curated by the participating organizations; for evaluation
-# it is derived as the UNION of activities flagged in any log.
-
-def _iter_xes_events(filepath):
-    """Yield (activity, is_flagged) for every event in an XES log, reading the
-    optional per-event handover boolean. Used to derive the global list H."""
-    opener = gzip.open if filepath.endswith(".gz") else open
-    with opener(filepath, 'rb') as f:
-        root = ET.parse(f).getroot()
-    traces = root.findall('.//{http://www.xes-standard.org/}trace') or root.findall('.//trace')
-    for trace in traces:
-        events = trace.findall('{http://www.xes-standard.org/}event') or trace.findall('event')
-        for event in events:
-            act = None
-            for s in (event.findall('{http://www.xes-standard.org/}string') or event.findall('string')):
-                if s.get('key') == 'concept:name':
-                    act = s.get('value')
-            flagged = False
-            for b in (event.findall('{http://www.xes-standard.org/}boolean') or event.findall('boolean')):
-                if b.get('key') == 'handover' and b.get('value') == 'true':
-                    flagged = True
-            yield act, flagged
-
-def derive_handover_union(filepaths):
-    """Return the global handover list H as the UNION of activities flagged
-    handover=true in any of the given logs."""
-    H = set()
-    for filepath in filepaths:
-        for act, flagged in _iter_xes_events(filepath):
-            if flagged and act is not None:
-                H.add(act)
-    return H
+# global list H. Every party applies the same H, so a trace shared by several
+# parties collapses identically on every side and the PSI match is preserved.
+# The organizations declare H once, before Stage 1, and each party reads it from
+# the same file; eval/prepare/handover_lists.py builds the lists shipped with
+# the evaluation logs.
 
 def load_handover_list(path):
     """Read a curated global handover list H: one activity name per line; blank
@@ -205,8 +176,10 @@ def parse_xes(filepath, use_handovers=False, timestamp_granularity=1, party_inde
     # The global handover list H, shared by every party (empty when unused).
     H = handover_activities or set()
     if use_handovers and not H:
-        print("Warning: handover collapse requested with an empty global list H; "
-              "every event becomes internal.")
+        raise ValueError(
+            "Handover collapse requires a non-empty global list H. Every event is "
+            "otherwise internal, collapsing each trace to a single fingerprint."
+        )
 
     # Try to find traces with namespace first, then without
     traces = root.findall('.//{http://www.xes-standard.org/}trace')
@@ -465,7 +438,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-handovers", action="store_true")
     parser.add_argument("--handover-activities", type=str, default=None,
                         help="Path to the global handover list H (one activity per line). "
-                             "With --use-handovers, defaults to the union of activities flagged in the logs.")
+                             "Required with --use-handovers; every party reads the same file.")
     parser.add_argument("--timestamp-granularity", choices=['ms', 's', 'm', 'h'], default='ms',
                         help="Timestamp rounding granularity: ms (no rounding), s (seconds), m (minutes), h (hours). All parties must use the same value.")
     args = parser.parse_args()
@@ -478,12 +451,12 @@ if __name__ == "__main__":
 
     handover_set = None
     if args.use_handovers:
-        if args.handover_activities:
-            handover_set = load_handover_list(args.handover_activities)
-            print(f"Loaded {len(handover_set)} handover activities from '{args.handover_activities}'")
-        else:
-            handover_set = derive_handover_union(args.logs)
-            print(f"Derived global handover list H (union) with {len(handover_set)} activities")
+        if not args.handover_activities:
+            print("Error: --use-handovers requires --handover-activities <file>, the "
+                  "public handover list H every party applies.")
+            sys.exit(1)
+        handover_set = load_handover_list(args.handover_activities)
+        print(f"Loaded {len(handover_set)} handover activities from '{args.handover_activities}'")
 
     cases_list = []
     for p, path in enumerate(args.logs):

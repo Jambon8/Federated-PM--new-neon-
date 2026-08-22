@@ -165,12 +165,13 @@ def build_command(data):
     ]
 
     if data.get('use_handovers'):
-        cmd.append("--use-handovers")
         handover_list = data.get('handover_activities')
-        if handover_list:
-            if not os.path.exists(handover_list):
-                return None, f"Handover list not found: {handover_list}"
-            cmd.extend(["--handover-activities", handover_list])
+        if not handover_list:
+            return None, ("Handover collapse requires the public handover list H: "
+                          "supply a text file with one activity name per line.")
+        if not os.path.exists(handover_list):
+            return None, f"Handover list not found: {handover_list}"
+        cmd.extend(["--use-handovers", "--handover-activities", handover_list])
 
     # Kept for API callers; the browser has no control for it.
     if not data.get('direct', True):

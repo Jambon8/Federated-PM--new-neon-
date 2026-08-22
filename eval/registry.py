@@ -241,7 +241,10 @@ def _runs_e5_handovers(reps=3):
         logs = list(N2_DATASETS[dset])
         args = ["--threshold", "1", "--k-anon", "0"]
         if ho:
-            args.append("--use-handovers")
+            # The public list H is prepared once by eval/prepare/handover_lists.py and
+            # shipped with the logs; every party applies the same file.
+            args += ["--use-handovers",
+                     "--handover-activities", f"data/2parties/{dset}/handover.txt"]
         rid = f"e5__{dset}__ho{int(ho)}__rep{rep}"
         out.append((rid, args, 2, logs,
                     {"experiment": "e5_handovers", "dataset": dset, "use_handovers": ho, "rep": rep}))

@@ -76,15 +76,15 @@
                         <span class="hint">Handover events stay verbatim. Each maximal run of internal
                             events collapses into one keyed fingerprint event at the run's last
                             timestamp.</span>
-                        <label for="handover_activities" class="hint">Global handover list H</label>
+                        <label for="handover_activities" class="hint">Global handover list H (required)</label>
                         <div class="file-input-wrapper">
-                            <input type="text" id="handover_activities" placeholder="optional .txt"
+                            <input type="text" id="handover_activities" placeholder="required .txt"
                                 autocomplete="off">
                             <button type="button" class="btn btn-small"
                                 onclick="openBrowser('handover_activities')">Browse</button>
                         </div>
-                        <span class="hint">Empty: derived as the union of the activities flagged in the
-                            logs.</span>
+                        <span class="hint">One activity name per line, applied identically by every
+                            party. The prepared logs ship one as data/2parties/&lt;dataset&gt;/handover.txt.</span>
                     </div>
                 </div>
 
@@ -482,6 +482,11 @@
             const blocking = protocolError();
             if (blocking) { showStatus(blocking); return; }
             if (partyLogs().some(p => !p)) { showStatus("Every party needs an event log."); return; }
+            if (document.getElementById('use_handovers').checked
+                && !document.getElementById('handover_activities').value.trim()) {
+                showStatus("Handover collapse needs the public handover list H.");
+                return;
+            }
 
             document.getElementById('statusMessage').className = 'hidden';
             rawOutput.textContent = "";

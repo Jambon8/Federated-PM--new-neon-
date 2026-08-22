@@ -65,7 +65,7 @@ def main():
     parser.add_argument("--use-handovers", action="store_true", help="Collapse each party's maximal runs of internal (non-H) events into keyed fingerprint events before secret sharing; handover events are kept verbatim")
     parser.add_argument("--handover-activities", type=str, default=None,
                         help="Path to the global handover list H (one activity per line), applied identically by every party. "
-                             "With --use-handovers, defaults to the union of activities flagged in the logs.")
+                             "Required with --use-handovers.")
     parser.add_argument("--partial-orders", type=int, default=0, help="Enable partial orders for concurrent events (0/1, default: 0)")
     parser.add_argument("--delta", type=_parse_delta, default='0',
                         help="Concurrency time window (default: 0 = exact timestamp equality, cheapest). Accepts: 0, 500ms, 10s, 1m, 2h")
@@ -122,17 +122,16 @@ def main():
 
     importer = import_source_file(import_path, module_name)
 
-    # Resolve the single global handover list H (shared by every party). Either
-    # load a curated file or derive it as the union of activities flagged in the
-    # logs; persist the resolved list for reproducibility.
+    # Load the single global handover list H, declared before Stage 1 and read
+    # from the same file by every party; persist it for reproducibility.
     handover_set = None
     if args.use_handovers:
-        if args.handover_activities:
-            handover_set = importer.load_handover_list(args.handover_activities)
-            print(f"Loaded global handover list H: {len(handover_set)} activities from {args.handover_activities}")
-        else:
-            handover_set = importer.derive_handover_union(log_paths)
-            print(f"Derived global handover list H (union): {len(handover_set)} activities")
+        if not args.handover_activities:
+            print("Error: --use-handovers requires --handover-activities <file>, the "
+                  "public handover list H every party applies.")
+            sys.exit(1)
+        handover_set = importer.load_handover_list(args.handover_activities)
+        print(f"Loaded global handover list H: {len(handover_set)} activities from {args.handover_activities}")
         h_path = "Player-Data/handover_activities.txt"
         with open(h_path, "w") as f:
             f.write("\n".join(sorted(handover_set)) + "\n")

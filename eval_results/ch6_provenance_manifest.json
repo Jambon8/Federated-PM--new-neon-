@@ -1,7 +1,7 @@
 {
   "scope": "Snapshot of files inspected for the Chapter 6 evidence audit; not proof of the source revision used by historical runs.",
-  "generated_at": "2026-08-22T19:38:46.117622+00:00",
-  "audit_git_revision": "c9077efddfe63e60efee4b1d9a763fe246da336c",
+  "generated_at": "2026-08-22T22:18:31.528105+00:00",
+  "audit_git_revision": "02c85ffef1d6f80298f062d38e7338340fc66773",
   "audit_worktree_dirty": true,
   "inputs": [
     {
@@ -56,13 +56,13 @@
     },
     {
       "path": "data/2parties/domestic_decl/party_0.xes.gz",
-      "bytes": 631512,
-      "sha256": "e4aef629f513bdc00823037b1d9e567762b307909f8f2fe5848bae8c427e69a1"
+      "bytes": 625168,
+      "sha256": "8c7dee7e6e6a03a8e6c5d48fac4438e8a1b254a48285a6fadbbe02a85114fbab"
     },
     {
       "path": "data/2parties/domestic_decl/party_1.xes.gz",
-      "bytes": 397964,
-      "sha256": "293d51274dfe94444f2d26bd6b967b5e8141b120f6b0cb7774817090e89dec7a"
+      "bytes": 390850,
+      "sha256": "f990bc6e5ec3effbeec647056342eedcbcb068acd440b1517b5f5882e7318118"
     },
     {
       "path": "data/2parties/e4b_bpi13_incidents_c1000/party_0.xes",
@@ -156,43 +156,43 @@
     },
     {
       "path": "data/2parties/international_decl/party_0.xes.gz",
-      "bytes": 870002,
-      "sha256": "e2c408da9eb9c440e0a502d8c841d78e9a2b3c703e903d602c4cef6eb53f5b32"
+      "bytes": 859518,
+      "sha256": "25df4fd3c237d8bfd16fbab5f390aab597dedeb9ceb23afe8244d9b1245effbe"
     },
     {
       "path": "data/2parties/international_decl/party_1.xes.gz",
-      "bytes": 1045862,
-      "sha256": "718a24408cacae0a7c4c723637cd4892333e351fd5645d9ed1a1e495925266e6"
+      "bytes": 1033121,
+      "sha256": "9c889ed2b316bde4670d08499b85667ce37c2218a209f8f9e61dabe9f6f4f65b"
     },
     {
       "path": "data/2parties/permit/party_0.xes.gz",
-      "bytes": 835759,
-      "sha256": "c46eba5269cc9ec29342032157b98fec61839db8216108845228c92803adfbb7"
+      "bytes": 823062,
+      "sha256": "fde09858a05c6b17958c26190038b79d825da602de7832eb8173fe2224f61b85"
     },
     {
       "path": "data/2parties/permit/party_1.xes.gz",
-      "bytes": 1368107,
-      "sha256": "50ae52ec5da2864639f6ee63742120503b8a5f9781698214faf7a733564d0e91"
+      "bytes": 1347989,
+      "sha256": "7a079cb6c72877af03868b38dacb1512aafff5f120722f41ac35d04740414ccf"
     },
     {
       "path": "data/2parties/requestforpayment/party_0.xes.gz",
-      "bytes": 335968,
-      "sha256": "5929b2c8d7a7f5fb33a2a05f455b1e588f2b3d853b9d5b586e3d260fc2c73f91"
+      "bytes": 332207,
+      "sha256": "241c9251bcc8512d91014407bbcd179ba02284069567f3e9b84216f929b5650f"
     },
     {
       "path": "data/2parties/requestforpayment/party_1.xes.gz",
-      "bytes": 452313,
-      "sha256": "3997405f658e1bd3fc884d02b397944baa73aa729add0b1b2638bed18d2bd2e6"
+      "bytes": 444939,
+      "sha256": "1b850de49c0ce063926abeea2fc080b0fa006886e290f2cf7d15504165cd2f37"
     },
     {
       "path": "data/2parties/sepsis/party_0.xes.gz",
-      "bytes": 84964,
-      "sha256": "5994a26ec0ed71a9200a05cb8e0adcc302065f54c24b51b5a3f526d1b4a3e3f8"
+      "bytes": 83776,
+      "sha256": "9e3259a8efd0b5ba91ab7428e251a2e571bc06c16bdb63cccbecacae65adb68e"
     },
     {
       "path": "data/2parties/sepsis/party_1.xes.gz",
-      "bytes": 112009,
-      "sha256": "d9005b3cbcc39c9b4c0f79bf074a7b60d2e61da0f598f5b7e88e6540314a3a72"
+      "bytes": 107909,
+      "sha256": "97a45b02db6c8e1ef8c0512d21d933a018bd46a95ecc47998c18716bf02f67ee"
     },
     {
       "path": "data/3parties/bpi13_closed/party_0.xes",
