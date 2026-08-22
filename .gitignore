@@ -1,5 +1,6 @@
 # Virtual environment
 fed_env/
+.deps/
 
 # Python cache
 __pycache__/
