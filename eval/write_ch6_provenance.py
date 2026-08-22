@@ -23,10 +23,11 @@ from eval.utils import run_files
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "eval_results" / "ch6_provenance_manifest.json"
+# The reported experiments. e3_scaling_input is excluded: the controlled grid
+# superseded it, and its records stay local.
 RESULT_DIRS = (
     "e1_correctness",
     "e2_performance",
-    "e3_scaling_input",
     "e4_scaling_n",
     "e5_handovers",
     "e6_partial_orders",

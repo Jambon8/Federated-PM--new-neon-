@@ -185,9 +185,10 @@ python3 eval/thesis_experiments.py --run e1__bpi13_open__default__rep0
 python3 eval/thesis_experiments.py --aggregate   # collect the JSONs into one CSV per experiment
 ```
 
-The full registry is 888 runs. `--list` prints them so a subset can be selected
-or fed to a job scheduler; `--aggregate` then reduces whatever completed into
-`eval_results/<experiment>.csv`, which is what the tables and figures read.
+The registry holds 723 runs, one stored record each. `--list` prints them so a
+subset can be selected or fed to a job scheduler; `--aggregate` then reduces
+whatever completed into `eval_results/<experiment>.csv`, which is what the
+tables and figures read.
 
 Correctness is checked independently of the harness, by reconstructing the
 expected release from the party logs directly and comparing it against the
@@ -201,32 +202,32 @@ python3 eval/verify_e10_outputs.py      # the three protocols release identicall
 python3 eval/verify_dp_calibration.py   # calibrated k against the sampler's grid
 ```
 
-Figures are generated from the aggregated CSVs:
+The thesis includes three figures, each with its own generator:
 
 ```bash
-python3 eval/plotting/plot_performance.py
-python3 eval/plotting/plot_scaling.py
-python3 eval/plotting/plot_dp.py
-python3 eval/plotting/plot_privacy.py
+python3 eval/plotting/dataset_stats.py       # dataset_stats.csv, then:
+python3 eval/plotting/plot_dataset_sizes.py  # -> dataset_sizes.pdf
+python3 eval/plotting/plot_stage_profile.py  # -> stage_profile.pdf
+python3 eval/plotting/plot_scaling.py        # -> fig_e3_controlled_grid.pdf
 ```
-
-Standalone drivers exist for individual studies outside the registry:
-`eval/correctness.py` (MPC output against the centralized baseline in
-`eval/baseline.py`), `eval/dp_evaluation.py` (DP correctness, statistics, cost),
-and `eval/privacy_utility.py` (privacy-utility trade-off over an epsilon grid).
 
 ### What is tracked
 
 The aggregated results the thesis reports are in the repository: one CSV per
-experiment, the verifier outputs, the generated figure data under
-`eval_results/{scaling_plots,stage_breakdown}/`, and
+experiment, the verifier outputs, the generated source of the figures the
+thesis includes, and
 `eval_results/ch6_provenance_manifest.json`, which records the SHA-256 of every
 input log, run result, and verifier output behind the evaluation chapter.
 Regenerate the manifest with `python3 eval/write_ch6_provenance.py`.
 
-Every number in the evaluation tables and figures is reproducible from those
-CSVs. The raw per-run JSONs they aggregate are not tracked; re-running an
-experiment regenerates them.
+The raw per-run records are tracked too, gzipped: pretty-printed JSON padded to
+the circuit width compresses from 3.7 GB to 21 MB, so the evidence behind every
+aggregated number ships with the code.
+
+What the repository carries is exactly what the thesis reports, plus whatever
+produces it. Studies that never reached the thesis, superseded runs, and
+diagnostics whose output no chapter carries stay local; `.gitignore` names each
+one and why.
 
 ---
 

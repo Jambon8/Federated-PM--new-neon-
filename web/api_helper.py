@@ -1,9 +1,8 @@
 """Structured parser for the process-mining MPC output.
 
 This module is the single place that turns a run's stdout into structured
-results. The Flask UI (``app.py``) and the correctness checker
-(``eval/correctness.py``) both call :func:`parse_output`; ``decode_output.py``
-stays the CLI pretty-printer over the same output.
+results. The Flask UI (``app.py``) renders what it returns;
+``pipeline/decode_output.py`` stays the CLI pretty-printer over the same output.
 
 Only party 0's live output reaches the driver's stdout (see
 ``vendor/ProgramFiles/MPSPDZClient.py``), so the communication figures parsed here are

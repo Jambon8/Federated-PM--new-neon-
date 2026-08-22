@@ -195,16 +195,27 @@ def plot_e4b(data, fname):
 
 
 def main():
+    # The controlled grid is the figure the thesis includes.
     e3_grid = load_e3_grid(os.path.join(EVAL, "e3_grid.csv"))
     plot_e3_grid(e3_grid, "fig_e3_controlled_grid.pdf")
-    e4b = load_e4b(os.path.join(EVAL, "e4b_scaling_n.csv"))
-    plot_e4b(e4b, "fig_e4b_party_scaling.pdf")
-    e3 = load_scaling(os.path.join(EVAL, "e3_scaling_input.csv"), "n_per_party_cap")
-    plot(e3, "Cases per party",  "Wall time (s)", "E3 input scaling",
-         "fig_e3_input_scaling.pdf")
-    e4 = load_scaling(os.path.join(EVAL, "e4_scaling_n.csv"), "n_parties")
-    plot(e4, "Number of parties $N$", "Wall time (s)", "E4 party scaling",
-         "fig_e4_n_scaling.pdf", xlog=False)
+
+    # Supplementary views. Their inputs are not part of the published set, so a
+    # missing CSV means the study stayed local rather than that something broke.
+    extras = [
+        ("e4b_scaling_n.csv", lambda p: plot_e4b(load_e4b(p), "fig_e4b_party_scaling.pdf")),
+        ("e3_scaling_input.csv", lambda p: plot(
+            load_scaling(p, "n_per_party_cap"), "Cases per party", "Wall time (s)",
+            "E3 input scaling", "fig_e3_input_scaling.pdf")),
+        ("e4_scaling_n.csv", lambda p: plot(
+            load_scaling(p, "n_parties"), "Number of parties $N$", "Wall time (s)",
+            "E4 party scaling", "fig_e4_n_scaling.pdf", xlog=False)),
+    ]
+    for name, draw in extras:
+        path = os.path.join(EVAL, name)
+        if os.path.exists(path):
+            draw(path)
+        else:
+            print(f"skipping {name}: not present")
 
 
 if __name__ == "__main__":

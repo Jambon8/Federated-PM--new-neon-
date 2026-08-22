@@ -43,18 +43,46 @@ data/
 /*.synctex.gz
 /*.toc
 
-# Evaluation. Everything the thesis rests on is tracked: one CSV per
-# experiment, the verifier outputs, the provenance manifest, the generated
-# figure data, and every raw per-run record. Records are gzipped, which takes
-# the complete set from 3.7 GB to 21 MB. Uncompressed records stay out, so a
-# fresh run does not add a 100 MB file to a commit by accident.
+# Evaluation. The rule: what the thesis reports, or what produces a number the
+# thesis reports, is tracked. Everything else stays local.
+#
+# Tracked: the experiment registry and the verifiers, the aggregated CSV per
+# reported experiment, the verifier outputs, the provenance manifest, the raw
+# per-run records (gzipped -- 3.7 GB of pretty-printed JSON becomes 21 MB), and
+# the generated source of the three figures the thesis includes.
 eval_results/*
 !eval_results/*.csv
 !eval_results/*.json
-!eval_results/scaling_plots/
-!eval_results/stage_breakdown/
 !eval_results/*/
 eval_results/*/*.json
+
+# Superseded by the controlled grid (e3g), which is what the thesis reports.
+eval_results/e3_scaling_input/
+eval_results/e3_scaling_input.csv
+
+# Diagnostics whose output the thesis does not carry.
+eval_results/stage_breakdown/
+eval_results/scaling_plots/fig_e3_input_scaling.pdf
+eval_results/scaling_plots/fig_e4_n_scaling.pdf
+eval_results/scaling_plots/fig_e4b_party_scaling.pdf
+eval_results/scaling_plots/fig_e4b_controlled_parties.pdf
+
+# The pre-registry generation of standalone drivers. The registry superseded
+# them; the directories they wrote to held the results retired on 2026-06-23.
+eval/baseline.py
+eval/correctness.py
+eval/dp_evaluation.py
+eval/partial_order.py
+eval/performance.py
+eval/privacy_utility.py
+eval/configs/
+
+# Plotting whose figures the thesis does not include.
+eval/plotting/plot_performance.py
+eval/plotting/plot_dp.py
+eval/plotting/plot_privacy.py
+eval/plotting/plot_stage_breakdown.py
+eval/plotting/e6_variant_diff.py
 
 # Generated command lists
 eval/commands*.txt

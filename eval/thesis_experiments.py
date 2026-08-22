@@ -124,23 +124,6 @@ def _runs_e2_performance(reps=5):
     return out
 
 
-def _runs_e2_threads(reps=5):
-    """Thread-scaling extension to E2: the E2 datasets re-run with explicit
-    --threads in {16, 32, 64} to measure multithreading speedup. --threads is
-    passed explicitly so build_command does not override it with the cluster
-    default; the program is recompiled per thread count (N_THREADS enters the
-    .mpc substitution, so each thread count is a distinct compile)."""
-    out = []
-    datasets = ("bpi13_incidents", "bpi13_open", "bpi13_closed", "sepsis", "requestforpayment",
-                "bpi17_offer", "bpi12", "domestic_decl", "international_decl", "hospital", "permit")
-    for dset, th, rep in itertools.product(datasets, (16, 32, 64), range(reps)):
-        logs = list(N2_DATASETS[dset])
-        rid = f"e2t__{dset}__t{th}__rep{rep}"
-        out.append((rid, ["--threshold", "1", "--k-anon", "0", "--threads", str(th)], 2, logs,
-                    {"experiment": "e2t_threads", "dataset": dset, "threads": th, "rep": rep}))
-    return out
-
-
 def _runs_e3_scaling_input(reps=3):
     """E3: scaling in input size. Uses pipeline/run.py --n-per-party-cap to
     subsample case IDs deterministically before encoding."""
@@ -387,8 +370,7 @@ def _runs_e8b_dp_delta(reps=5):
 EXPERIMENTS = {
     "e1": _runs_e1_correctness,
     "e2": _runs_e2_performance,
-    "e2t": _runs_e2_threads,
-    "e3": _runs_e3_scaling_input,   # superseded by e3g; kept for provenance of stored records
+    "e3": _runs_e3_scaling_input,   # superseded by e3g; records stay local, see .gitignore
     "e3g": _runs_e3_grid,
     "e4": _runs_e4_scaling_n,
     "e4b": _runs_e4b_scaling_n,
@@ -411,7 +393,7 @@ def all_runs(only=None):
 
 
 # ---------------------------------------------------------------------------
-# Output parsing — reuse eval/performance.py logic
+# Output parsing
 # ---------------------------------------------------------------------------
 
 _TIMER_RE   = re.compile(r"Stopped timer (\d+) at ([\d\.]+) \(([\d\.]+) MB, (\d+) rounds\)")
