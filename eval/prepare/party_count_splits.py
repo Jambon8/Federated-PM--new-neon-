@@ -23,7 +23,7 @@ Runs pass --force-partial-len 20 so the encoded width is pinned identically in
 every cell (no truncation occurs: the filter caps local traces at 20 events).
 
 Usage:
-    python3 eval/generate_e4b_splits.py            # writes data/<n>parties/e4b_*/
+    python3 eval/prepare/party_count_splits.py            # writes data/<n>parties/e4b_*/
 """
 
 import json
@@ -33,7 +33,7 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 from pipeline import import_xes  # noqa: E402
 

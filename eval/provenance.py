@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from thesis_experiments import all_runs
+from eval.registry import all_runs
 from eval.utils import run_files
 
 
@@ -41,15 +41,15 @@ RESULT_DIRS = (
     "protection_dp_epsilon_delta",
 )
 AUDIT_FILES = (
-    "eval/verify_e1_independent.py",
-    "eval/verify_e4_splits.py",
-    "eval/verify_e10_outputs.py",
+    "eval/verify/correctness.py",
+    "eval/verify/splits.py",
+    "eval/verify/backends.py",
     "eval_results/e1_independent_correctness.json",
     "eval_results/e4_split_stats.json",
     "eval_results/e10_output_equivalence.json",
-    "eval/verify_e4b_outputs.py",
+    "eval/verify/party_count.py",
     "eval_results/e4b_output_equivalence.json",
-    "eval/verify_dp_calibration.py",
+    "eval/verify/dp_calibration.py",
     "eval_results/dp_calibration_verification.json",
 )
 

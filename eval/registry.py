@@ -2,16 +2,16 @@
 
 Usage:
     # List every run as a shell command (one per line) — feed to SLURM array.
-    python3 eval/thesis_experiments.py --list
+    python3 eval/registry.py --list
 
     # List only one experiment block.
-    python3 eval/thesis_experiments.py --list --experiment e1
+    python3 eval/registry.py --list --experiment e1
 
     # Execute exactly one run by ID; writes JSON to eval_results/<exp>/<run_id>.json.
-    python3 eval/thesis_experiments.py --run e1__bpi13_incidents__default__rep0
+    python3 eval/registry.py --run e1__bpi13_incidents__default__rep0
 
     # Aggregate all completed JSONs into one CSV per experiment.
-    python3 eval/thesis_experiments.py --aggregate
+    python3 eval/registry.py --aggregate
 """
 
 import argparse
@@ -197,7 +197,7 @@ def _runs_e3_grid(reps=3):
 
 
 def _runs_e4b_scaling_n(reps=3):
-    """E4b: multiparty scaling sweep on the e4b inputs (generate_e4b_splits.py).
+    """E4b: multiparty scaling sweep on the e4b inputs (party_count_splits.py).
 
     Every cell holds the same 500 joint cases at 100% overlap with the row
     width pinned to 20 via --force-partial-len as n and the total row count
@@ -664,7 +664,7 @@ def main():
 
     if args.list:
         for rid, _, _, _, _ in all_runs(only=args.experiment):
-            print(f"python3 eval/thesis_experiments.py --run {rid}")
+            print(f"python3 eval/registry.py --run {rid}")
         return
 
     if args.run:

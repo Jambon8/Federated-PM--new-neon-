@@ -5,7 +5,7 @@ statistics therefore use ``import_xes.parse_xes`` instead of counting raw
 ``<trace>`` elements, so ``N_per_party`` matches the encoded matrix cap.
 
 Usage:
-    python3 eval/plotting/dataset_stats.py
+    python3 eval/figures/dataset_stats.py
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, ROOT)
 
 from pipeline import import_xes  # noqa: E402
-from eval.thesis_experiments import N2_DATASETS  # noqa: E402
+from eval.registry import N2_DATASETS  # noqa: E402
 
 
 OUTPUT = os.path.join(ROOT, "eval_results", "dataset_stats.csv")

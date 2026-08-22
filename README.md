@@ -173,16 +173,16 @@ git add -f data/<path>
 
 ## Evaluation
 
-`eval/thesis_experiments.py` is the experiment registry: every measurement
+`eval/registry.py` is the experiment registry: every measurement
 reported in the thesis resolves to one run ID there. A run is executed by ID and
 writes one JSON file per run under `eval_results/<experiment>/`.
 
 ```bash
-python3 eval/thesis_experiments.py --count       # runs per experiment
-python3 eval/thesis_experiments.py --list        # one shell command per run
-python3 eval/thesis_experiments.py --list --experiment e2   # just one experiment
-python3 eval/thesis_experiments.py --run e1__bpi13_open__default__rep0
-python3 eval/thesis_experiments.py --aggregate   # collect the JSONs into one CSV per experiment
+python3 eval/registry.py --count       # runs per experiment
+python3 eval/registry.py --list        # one shell command per run
+python3 eval/registry.py --list --experiment e2   # just one experiment
+python3 eval/registry.py --run e1__bpi13_open__default__rep0
+python3 eval/registry.py --aggregate   # collect the JSONs into one CSV per experiment
 ```
 
 The registry holds 723 runs, one stored record each. `--list` prints them so a
@@ -215,20 +215,20 @@ expected release from the party logs directly and comparing it against the
 stored MPC output:
 
 ```bash
-python3 eval/verify_e1_independent.py   # variants and counts vs the two local logs
-python3 eval/verify_e4_splits.py        # N-party splits match their generator
-python3 eval/verify_e4b_outputs.py      # every party count releases the same variants
-python3 eval/verify_e10_outputs.py      # the three protocols release identically
-python3 eval/verify_dp_calibration.py   # calibrated k against the sampler's grid
+python3 eval/verify/correctness.py   # variants and counts vs the two local logs
+python3 eval/verify/splits.py        # N-party splits match their generator
+python3 eval/verify/party_count.py      # every party count releases the same variants
+python3 eval/verify/backends.py      # the three protocols release identically
+python3 eval/verify/dp_calibration.py   # calibrated k against the sampler's grid
 ```
 
 The thesis includes three figures, each with its own generator:
 
 ```bash
-python3 eval/plotting/dataset_stats.py       # dataset_stats.csv, then:
-python3 eval/plotting/plot_dataset_sizes.py  # -> dataset_sizes.pdf
-python3 eval/plotting/plot_stage_profile.py  # -> stage_profile.pdf
-python3 eval/plotting/plot_scaling.py        # -> fig_e3_controlled_grid.pdf
+python3 eval/figures/dataset_stats.py       # dataset_stats.csv, then:
+python3 eval/figures/dataset_sizes.py  # -> dataset_sizes.pdf
+python3 eval/figures/stage_profile.py  # -> stage_profile.pdf
+python3 eval/figures/scaling.py        # -> fig_e3_controlled_grid.pdf
 ```
 
 ### What is tracked
@@ -238,7 +238,7 @@ experiment, the verifier outputs, the generated source of the figures the
 thesis includes, and
 `eval_results/ch6_provenance_manifest.json`, which records the SHA-256 of every
 input log, run result, and verifier output behind the evaluation chapter.
-Regenerate the manifest with `python3 eval/write_ch6_provenance.py`.
+Regenerate the manifest with `python3 eval/provenance.py`.
 
 The raw per-run records are tracked too, gzipped: pretty-printed JSON padded to
 the circuit width compresses from 3.7 GB to 21 MB, so the evidence behind every
@@ -276,7 +276,12 @@ everything under `vendor/` was written by someone else.
 ├── web/                             # Browser tool
 │   ├── app.py, api_helper.py        #   Flask server and output parsing
 │   └── templates/, static/
-├── eval/                            # Experiment registry, runners, plotting
+├── eval/                            # The evaluation
+│   ├── registry.py                  #   every reported run, by id
+│   ├── verify/                      #   independent correctness checks
+│   ├── figures/                     #   the thesis figures
+│   ├── prepare/                     #   split generation, precompilation
+│   └── provenance.py                #   SHA-256 manifest
 ├── tests/                           # Unit tests
 ├── requirements.txt                 # Protocol + web UI
 ├── requirements-eval.txt            # Adds the evaluation stack

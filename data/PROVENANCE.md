@@ -51,4 +51,4 @@ the total row count vary. Directory names carry the cases per party:
 Both series derive from `sepsis` and `bpi13_incidents`.
 [e4b_meta.json](e4b_meta.json) records the sampling seed, the trace-length
 filter, and the per-cell case and row counts.
-Regenerate with `python3 eval/generate_e4b_splits.py`.
+Regenerate with `python3 eval/prepare/party_count_splits.py`.

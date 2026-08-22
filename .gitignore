@@ -78,7 +78,7 @@ eval/privacy_utility.py
 eval/configs/
 
 # Plotting whose figures the thesis does not include.
-eval/plotting/plot_performance.py
+eval/figures/plot_performance.py
 eval/plotting/plot_dp.py
 eval/plotting/plot_privacy.py
 eval/plotting/plot_stage_breakdown.py

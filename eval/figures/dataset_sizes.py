@@ -1,7 +1,7 @@
 """Create the Chapter 6 dataset-size figure from the pinned statistics CSV.
 
 Usage:
-    python3 eval/plotting/plot_dataset_sizes.py --out Thesis/thesis-main/figures
+    python3 eval/figures/dataset_sizes.py --out Thesis/thesis-main/figures
 """
 
 import argparse

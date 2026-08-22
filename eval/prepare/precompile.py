@@ -7,8 +7,8 @@ The dedup key intentionally ignores axes that do NOT affect compilation:
   --threads, --mode, --network, --seed.
 
 Usage:
-    python3 eval/precompile_all.py                # serial, show progress
-    python3 eval/precompile_all.py --dry-run      # just print what would run
+    python3 eval/prepare/precompile.py                # serial, show progress
+    python3 eval/prepare/precompile.py --dry-run      # just print what would run
 """
 
 import argparse
@@ -18,10 +18,10 @@ import sys
 import time
 from typing import List, Tuple
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
-from eval.thesis_experiments import EXPERIMENTS, all_runs, build_command  # noqa: E402
+from eval.registry import EXPERIMENTS, all_runs, build_command  # noqa: E402
 
 NON_COMPILE_FLAGS = {"--threads", "--mode", "--network", "--seed"}
 

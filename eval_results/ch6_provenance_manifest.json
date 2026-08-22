@@ -1,7 +1,7 @@
 {
   "scope": "Snapshot of files inspected for the Chapter 6 evidence audit; not proof of the source revision used by historical runs.",
-  "generated_at": "2026-08-22T19:31:47.904112+00:00",
-  "audit_git_revision": "101bbe63977295aeb2b46c03ecfb0e69e5abd5a1",
+  "generated_at": "2026-08-22T19:38:46.117622+00:00",
+  "audit_git_revision": "c9077efddfe63e60efee4b1d9a763fe246da336c",
   "audit_worktree_dirty": true,
   "inputs": [
     {
@@ -3859,29 +3859,29 @@
   ],
   "audit_files": [
     {
-      "path": "eval/verify_dp_calibration.py",
-      "bytes": 3708,
-      "sha256": "547c77de9d4756a8505fe7d9c0fcfb53b445374cbc96582725a3d05ce525e675"
-    },
-    {
-      "path": "eval/verify_e10_outputs.py",
+      "path": "eval/verify/backends.py",
       "bytes": 2191,
-      "sha256": "27ec4a6144f53a6408bd0f68915b6c411b1d40de93fddccca93f057c44a64435"
+      "sha256": "e78e69e460446a41f33ba43dc03261133858785442881a6097016394bc1b57dc"
     },
     {
-      "path": "eval/verify_e1_independent.py",
-      "bytes": 4034,
-      "sha256": "7b440728af46acda1c9d6a663c6c01a2e35a89a98bf9e1d1b0356d4dd39a6d36"
+      "path": "eval/verify/correctness.py",
+      "bytes": 4024,
+      "sha256": "de11afb160c7de04e04789b7b298f5e1464f023f8885597143a0434e63e78761"
     },
     {
-      "path": "eval/verify_e4_splits.py",
-      "bytes": 4244,
-      "sha256": "5211fd2331b76afd0ea40f619892e4ea659e8f3486ce9448a6334385b6b0aa49"
+      "path": "eval/verify/dp_calibration.py",
+      "bytes": 3742,
+      "sha256": "7c5ee9bdfbc3afae1f667bc2aa110a426a04267ea08356b30feb7a82580eb735"
     },
     {
-      "path": "eval/verify_e4b_outputs.py",
+      "path": "eval/verify/party_count.py",
       "bytes": 4588,
-      "sha256": "7b37cbd8e5b7a569216c3481a801fccbfcc05712ba2277b057d7b2eaf3595235"
+      "sha256": "bdd2cf3fa08e79662b3a92127375c1af2961564f57dca6e78644545ece79613f"
+    },
+    {
+      "path": "eval/verify/splits.py",
+      "bytes": 4234,
+      "sha256": "1636f374196b0b89dda713afbd7120d076f033e8fce0de94496efaf4b0398ffb"
     },
     {
       "path": "eval_results/dp_calibration_verification.json",

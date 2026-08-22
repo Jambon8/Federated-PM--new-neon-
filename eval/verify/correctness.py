@@ -15,12 +15,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from pipeline import import_xes
-from eval.thesis_experiments import N2_DATASETS
+from eval.registry import N2_DATASETS
 from eval.utils import find_run, load_run
 
 

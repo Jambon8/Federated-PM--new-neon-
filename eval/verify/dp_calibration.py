@@ -9,7 +9,7 @@ import os
 import sys
 from decimal import Decimal, localcontext
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from pipeline.dp_calibration import (  # noqa: E402
     calibrate_dp,

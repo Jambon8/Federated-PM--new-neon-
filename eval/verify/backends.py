@@ -7,12 +7,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from eval.utils import find_run, load_run  # noqa: E402
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "eval_results" / "performance_backends"
 OUTPUT = ROOT / "eval_results" / "e10_output_equivalence.json"
 DATASETS = ("bpi13_open", "bpi13_closed", "sepsis", "bpi13_incidents")

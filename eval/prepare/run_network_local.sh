@@ -8,7 +8,7 @@
 # Usage:
 #   sudo -E env "PATH=$PATH" "HOME=$HOME" \
 #        NEON_THREADS=8 \
-#        bash eval/run_e7_local.sh
+#        bash eval/prepare/run_network_local.sh
 #
 # Reads NEON_DATA_ROOT automatically as <repo-root>/data (the location of the
 # per-party-count log tree on a local checkout). NEON_THREADS defaults to 8.
@@ -60,7 +60,7 @@ ip netns 2>/dev/null | grep '^neon_ns' | xargs -r -I{} ip netns del {} || true
 REPO_FOR_PY="$REPO" python3 -u <<'PY' > eval/commands_e7.txt
 import json, os, sys
 sys.path.insert(0, os.environ["REPO_FOR_PY"])
-from eval.thesis_experiments import all_runs
+from eval.registry import all_runs
 
 results_dir = os.path.join(os.environ["REPO_FOR_PY"], "eval_results", "scaling_network_latency")
 done = set()
@@ -78,7 +78,7 @@ if os.path.isdir(results_dir):
 for rid, args, n, logs, meta in all_runs(only="e7"):
     if rid in done:
         continue
-    print(f"python3 eval/thesis_experiments.py --run {rid}")
+    print(f"python3 eval/registry.py --run {rid}")
 PY
 total=$(wc -l < eval/commands_e7.txt)
 echo "[$(date +%H:%M:%S)] $total E7 runs to execute (skipping ones already done with rc=0)"
@@ -109,4 +109,4 @@ chown -R "$REAL_USER:$REAL_USER" eval_results logs temp 2>/dev/null || true
 
 echo
 echo "[$(date +%H:%M:%S)] DONE. ran=$total failed=$fail"
-echo "Aggregate with:  NEON_DATA_ROOT=\$HOME python3 eval/thesis_experiments.py --aggregate"
+echo "Aggregate with:  NEON_DATA_ROOT=\$HOME python3 eval/registry.py --aggregate"

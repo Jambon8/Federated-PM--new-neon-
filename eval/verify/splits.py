@@ -9,12 +9,12 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from pipeline import import_xes
-from eval.thesis_experiments import N2_DATASETS, N_WAY_DATASETS
+from eval.registry import N2_DATASETS, N_WAY_DATASETS
 
 
 OUTPUT = ROOT / "eval_results" / "e4_split_stats.json"
