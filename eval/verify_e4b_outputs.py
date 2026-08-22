@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from eval.utils import find_run, load_run  # noqa: E402
+
 from pipeline import import_xes
 
 
@@ -65,7 +67,7 @@ def centralized_release(paths: list[Path]) -> Counter[tuple[int, ...]]:
 
 def stored_release(path: Path) -> Counter[tuple[int, ...]]:
     """Decode a stored Stage-6 release into its complete trace--count map."""
-    record = json.loads(path.read_text())
+    record = load_run(path)
     release: Counter[tuple[int, ...]] = Counter()
     for variant in record["variants"]:
         trace = tuple(
@@ -102,7 +104,7 @@ def main() -> None:
 
             repetitions = []
             for repetition in REPETITIONS:
-                result_path = RESULTS / f"e4b__{dataset}__N{n}__rep{repetition}.json"
+                result_path = Path(find_run(RESULTS, f"e4b__{dataset}__N{n}__rep{repetition}"))
                 observed = stored_release(result_path)
                 match = observed == expected
                 all_match &= match

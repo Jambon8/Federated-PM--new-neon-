@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
 
 from pipeline import import_xes
 from eval.thesis_experiments import N2_DATASETS
+from eval.utils import find_run, load_run
 
 
 RESULTS = ROOT / "eval_results" / "e1_correctness"
@@ -64,7 +65,7 @@ def _centralized_release(log_a: str, log_b: str) -> Counter[tuple[int, ...]]:
 
 def _stored_release(path: Path) -> Counter[tuple[int, ...]]:
     """Decode the Stage-6 E1 output representation stored in ``path``."""
-    record = json.loads(path.read_text())
+    record = load_run(path)
     release: Counter[tuple[int, ...]] = Counter()
     for variant in record["variants"]:
         trace = tuple(activity for activity, _marker in variant["raw"] if activity != 0)
@@ -84,7 +85,7 @@ def main() -> None:
     }
     all_match = True
     for dataset in DATASETS:
-        stored_path = RESULTS / f"e1__{dataset}__default__rep0.json"
+        stored_path = Path(find_run(RESULTS, f"e1__{dataset}__default__rep0"))
         expected = _centralized_release(*N2_DATASETS[dataset])
         observed = _stored_release(stored_path)
         missing = expected - observed

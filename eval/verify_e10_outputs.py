@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections import Counter
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from eval.utils import find_run, load_run  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +20,7 @@ PROTOCOLS = ("semi", "rep_bin")
 
 
 def _release(path: Path) -> Counter[tuple[tuple[int, int], ...]]:
-    record = json.loads(path.read_text())
+    record = load_run(path)
     return Counter({
         tuple(tuple(pair) for pair in variant["raw"] if pair[0] != 0): variant["count"]
         for variant in record["variants"]
@@ -32,7 +37,7 @@ def main() -> None:
             releases[protocol] = []
             files[protocol] = []
             for repetition in range(3):
-                path = RESULTS / f"e10__{dataset}__{protocol}__rep{repetition}.json"
+                path = Path(find_run(RESULTS, f"e10__{dataset}__{protocol}__rep{repetition}"))
                 releases[protocol].append(_release(path))
                 files[protocol].append(str(path.relative_to(ROOT)))
         within_protocol = {

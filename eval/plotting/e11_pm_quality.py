@@ -60,6 +60,8 @@ RESULTS_ROOT = os.path.join(ROOT, "eval_results")
 OUT_DIR = os.path.join(RESULTS_ROOT, "pm_quality")
 sys.path.insert(0, ROOT)
 
+from eval.utils import load_run, run_files  # noqa: E402
+
 
 DATASET_LOG_PATH = {
     "bpi13_incidents":   "data/2parties/bpi13_incidents/party_0.xes.gz",
@@ -172,10 +174,10 @@ def process_experiment(exp, datasets_filter):
     original_dist_cache = {}
 
     rows = []
-    files = sorted(f for f in os.listdir(exp_dir) if f.endswith(".json"))
+    files = run_files(exp_dir)
     print(f"=== {exp}: {len(files)} files ===")
-    for i, fn in enumerate(files):
-        rec = json.load(open(os.path.join(exp_dir, fn)))
+    for i, path in enumerate(files):
+        rec = load_run(path)
         meta = rec["meta"]
         dset = meta["dataset"]
         if datasets_filter and dset not in datasets_filter:

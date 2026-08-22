@@ -2,7 +2,7 @@
   "method": "Direct centralized reconstruction from the two local XES logs: join shared case identifiers, sort each joint case by (timestamp, public activity identifier), and compare trace--count pairs with the stored E1 Stage-6 output.",
   "datasets": {
     "bpi13_incidents": {
-      "stored_result": "eval_results/e1_correctness/e1__bpi13_incidents__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__bpi13_incidents__default__rep0.json.gz",
       "centralized_variants": 1507,
       "stored_variants": 1507,
       "centralized_cases": 6958,
@@ -12,7 +12,7 @@
       "extra_variant_count": 0
     },
     "bpi13_open": {
-      "stored_result": "eval_results/e1_correctness/e1__bpi13_open__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__bpi13_open__default__rep0.json.gz",
       "centralized_variants": 104,
       "stored_variants": 104,
       "centralized_cases": 434,
@@ -22,7 +22,7 @@
       "extra_variant_count": 0
     },
     "bpi13_closed": {
-      "stored_result": "eval_results/e1_correctness/e1__bpi13_closed__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__bpi13_closed__default__rep0.json.gz",
       "centralized_variants": 182,
       "stored_variants": 182,
       "centralized_cases": 1130,
@@ -32,7 +32,7 @@
       "extra_variant_count": 0
     },
     "sepsis": {
-      "stored_result": "eval_results/e1_correctness/e1__sepsis__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__sepsis__default__rep0.json.gz",
       "centralized_variants": 690,
       "stored_variants": 690,
       "centralized_cases": 1015,
@@ -42,7 +42,7 @@
       "extra_variant_count": 0
     },
     "requestforpayment": {
-      "stored_result": "eval_results/e1_correctness/e1__requestforpayment__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__requestforpayment__default__rep0.json.gz",
       "centralized_variants": 74,
       "stored_variants": 74,
       "centralized_cases": 6404,
@@ -52,7 +52,7 @@
       "extra_variant_count": 0
     },
     "bpi17_offer": {
-      "stored_result": "eval_results/e1_correctness/e1__bpi17_offer__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__bpi17_offer__default__rep0.json.gz",
       "centralized_variants": 16,
       "stored_variants": 16,
       "centralized_cases": 38994,
@@ -62,7 +62,7 @@
       "extra_variant_count": 0
     },
     "bpi12": {
-      "stored_result": "eval_results/e1_correctness/e1__bpi12__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__bpi12__default__rep0.json.gz",
       "centralized_variants": 3792,
       "stored_variants": 3792,
       "centralized_cases": 12175,
@@ -72,7 +72,7 @@
       "extra_variant_count": 0
     },
     "domestic_decl": {
-      "stored_result": "eval_results/e1_correctness/e1__domestic_decl__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__domestic_decl__default__rep0.json.gz",
       "centralized_variants": 66,
       "stored_variants": 66,
       "centralized_cases": 10047,
@@ -82,7 +82,7 @@
       "extra_variant_count": 0
     },
     "international_decl": {
-      "stored_result": "eval_results/e1_correctness/e1__international_decl__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__international_decl__default__rep0.json.gz",
       "centralized_variants": 792,
       "stored_variants": 792,
       "centralized_cases": 6449,
@@ -92,7 +92,7 @@
       "extra_variant_count": 0
     },
     "hospital": {
-      "stored_result": "eval_results/e1_correctness/e1__hospital__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__hospital__default__rep0.json.gz",
       "centralized_variants": 974,
       "stored_variants": 974,
       "centralized_cases": 1085,
@@ -102,7 +102,7 @@
       "extra_variant_count": 0
     },
     "permit": {
-      "stored_result": "eval_results/e1_correctness/e1__permit__default__rep0.json",
+      "stored_result": "eval_results/e1_correctness/e1__permit__default__rep0.json.gz",
       "centralized_variants": 1303,
       "stored_variants": 1303,
       "centralized_cases": 5608,

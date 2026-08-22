@@ -19,6 +19,13 @@ import json
 import os
 from collections import Counter, defaultdict
 
+import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from eval.utils import load_run, run_files, run_id_of  # noqa: E402
+
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 E6_DIR  = os.path.join(ROOT, "eval_results", "e6_partial_orders")
@@ -43,10 +50,10 @@ def load_e6(keyfn):
     """Return {(dataset, po, delta): {variant_key: count}} folded by `keyfn`."""
     # Reps are deterministic for the same config; rep0 alone is canonical.
     per_config = defaultdict(dict)
-    for fn in sorted(os.listdir(E6_DIR)):
-        if not fn.endswith("_rep0.json"):
+    for path in run_files(E6_DIR):
+        if not run_id_of(path).endswith("_rep0"):
             continue
-        rec = json.load(open(os.path.join(E6_DIR, fn)))
+        rec = load_run(path)
         meta = rec["meta"]
         key = (meta["dataset"], int(meta["partial_orders"]), str(meta["delta"]))
         counter = Counter()

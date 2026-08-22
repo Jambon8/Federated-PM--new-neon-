@@ -25,6 +25,13 @@ import os
 import sys
 from collections import defaultdict
 
+import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from eval.utils import load_run, run_files, run_id_of  # noqa: E402
+
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -67,12 +74,10 @@ def aggregate(view="logical"):
     mapping = LOGICAL_MAP if view == "logical" else dict(TIMER_TO_STAGE)
     # per_rep[dset][rep_key][stage][metric] = float (summed across folded timers)
     per_rep = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(float))))
-    for fn in sorted(os.listdir(RESULTS_DIR)):
-        if not fn.endswith(".json"):
-            continue
-        rec = json.load(open(os.path.join(RESULTS_DIR, fn)))
+    for path in run_files(RESULTS_DIR):
+        rec = load_run(path)
         dset = rec["meta"]["dataset"]
-        rep_key = rec.get("run_id", fn)
+        rep_key = rec.get("run_id", run_id_of(path))
         for tid_str, t in rec["metrics"].get("timers", {}).items():
             tid = int(tid_str)
             stage = mapping.get(tid)

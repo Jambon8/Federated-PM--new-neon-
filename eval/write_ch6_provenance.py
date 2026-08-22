@@ -13,7 +13,12 @@ import json
 import subprocess
 from pathlib import Path
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from thesis_experiments import all_runs
+from eval.utils import run_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,7 +79,8 @@ def main() -> None:
     raw_results = {
         path
         for directory in RESULT_DIRS
-        for path in (ROOT / "eval_results" / directory).glob("*.json")
+        for path in (Path(p) for d in [directory]
+                     for p in run_files(ROOT / "eval_results" / d))
     }
     audit_paths = {ROOT / path for path in AUDIT_FILES}
     manifest = {

@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import json
 import argparse
+import sys
 from collections import defaultdict
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from eval.utils import load_run, run_files  # noqa: E402
 
 import matplotlib
 
@@ -50,9 +55,8 @@ def load_shares(results: Path = RESULTS) -> np.ndarray:
     """Return five-run mean shares as [metric, dataset, stage]."""
     values = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     successful = 0
-    for path in sorted(results.glob("*.json")):
-        with path.open(encoding="utf-8") as handle:
-            record = json.load(handle)
+    for path in run_files(results):
+        record = load_run(path)
         if record["metrics"].get("return_code") != 0:
             continue
         successful += 1
@@ -89,7 +93,7 @@ def plot(shares: np.ndarray, output: Path = OUTPUT) -> None:
         "axes.linewidth": 0.6,
         "pdf.fonttype": 42,
     })
-    figure, axes = plt.subplots(3, 1, figsize=(4.9, 6.5), sharex=True)
+    figure, axes = plt.subplots(3, 1, figsize=(4.9, 7.4), sharex=True)
     y = np.arange(len(DATASETS))
 
     for metric_index, (axis, (_, title)) in enumerate(zip(axes, METRICS)):
@@ -110,7 +114,7 @@ def plot(shares: np.ndarray, output: Path = OUTPUT) -> None:
         for row in range(len(DATASETS)):
             for stage_index in (0, 1, 3, 4):
                 share = matrix[row, stage_index]
-                if share < 8:
+                if share < 5:
                     continue
                 center = matrix[row, :stage_index].sum() + share / 2
                 axis.text(
@@ -120,7 +124,7 @@ def plot(shares: np.ndarray, output: Path = OUTPUT) -> None:
                     ha="center",
                     va="center",
                     color="white" if stage_index in (0, 3, 4) else "black",
-                    fontsize=9.0,
+                    fontsize=7.0,
                     fontweight="bold",
                 )
 

@@ -43,16 +43,19 @@ data/
 /*.synctex.gz
 /*.toc
 
-# Evaluation. The aggregated results the thesis reports are tracked: one CSV
-# per experiment, the verifier outputs, the provenance manifest, and the
-# generated figure data. The raw per-run JSONs behind them are not — they run
-# to several gigabytes.
+# Evaluation. Everything the thesis rests on is tracked: one CSV per
+# experiment, the verifier outputs, the provenance manifest, the generated
+# figure data, and every raw per-run record. Records are gzipped, which takes
+# the complete set from 3.7 GB to 21 MB. Uncompressed records stay out, so a
+# fresh run does not add a 100 MB file to a commit by accident.
 eval_results/*
 !eval_results/*.csv
 !eval_results/*.json
 !eval_results/pm_quality/
 !eval_results/scaling_plots/
 !eval_results/stage_breakdown/
+!eval_results/*/
+eval_results/*/*.json
 
 # Generated command lists
 eval/commands*.txt

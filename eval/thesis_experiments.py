@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import gzip
 import itertools
 import json
 import os
@@ -27,6 +28,8 @@ from datetime import datetime
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 RESULTS_ROOT = os.environ.get("NEON_RESULTS_ROOT", os.path.join(PROJECT_ROOT, "eval_results"))
+
+from eval.utils import load_run, run_files  # noqa: E402
 RUN_CMD = ["python3", "-u", "pipeline/run.py"]
 
 # Results written before this UTC instant predate the 2026-06-23 Stage-6 reveal
@@ -560,8 +563,10 @@ def run_one(run_id, write_results=True):
         exp = meta["experiment"]
         out_dir = os.path.join(RESULTS_ROOT, exp)
         os.makedirs(out_dir, exist_ok=True)
-        out = os.path.join(out_dir, f"{run_id}.json")
-        with open(out, "w") as f:
+        # Gzipped: the Stage-6 output matrix is mostly padding, so a record
+        # compresses by about a hundredfold. eval.utils.load_run reads both forms.
+        out = os.path.join(out_dir, f"{run_id}.json.gz")
+        with gzip.open(out, "wt", encoding="utf-8") as f:
             json.dump(record, f, indent=2, default=str)
         print(f"[{run_id}] -> {out}  rc={proc.returncode}  wall={wall:.1f}s")
     return 0 if proc.returncode == 0 else 2
@@ -587,11 +592,8 @@ def aggregate():
             continue
         rows = []
         dropped = 0
-        for fn in sorted(os.listdir(exp_dir)):
-            if not fn.endswith(".json"):
-                continue
-            with open(os.path.join(exp_dir, fn)) as f:
-                rec = json.load(f)
+        for path in run_files(exp_dir):
+            rec = load_run(path)
             if "run_id" not in rec:
                 continue
             metrics = rec.get("metrics", {})

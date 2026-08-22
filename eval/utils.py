@@ -1,3 +1,4 @@
+import gzip
 import os
 import json
 import random
@@ -5,6 +6,48 @@ import logging
 from datetime import datetime
 
 EVAL_RESULTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "eval_results")
+
+
+# Run records are stored gzipped: they are pretty-printed JSON whose bulk is
+# padding in the Stage-6 output matrix, which compresses by a factor of about a
+# hundred. Both forms are accepted so that records written before the change,
+# or by hand, still load.
+RUN_SUFFIXES = (".json.gz", ".json")
+
+
+def load_run(path):
+    """Read one run record, gzipped or plain."""
+    path = str(path)
+    opener = gzip.open if path.endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def find_run(directory, run_id):
+    """Path of one run's record, preferring the gzipped form; None if absent."""
+    for suffix in RUN_SUFFIXES:
+        candidate = os.path.join(str(directory), run_id + suffix)
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def run_files(directory):
+    """Sorted paths of every run record in a results directory."""
+    return sorted(
+        os.path.join(str(directory), name)
+        for name in os.listdir(str(directory))
+        if name.endswith(RUN_SUFFIXES)
+    )
+
+
+def run_id_of(path):
+    """Run id encoded in a record's file name."""
+    name = os.path.basename(str(path))
+    for suffix in RUN_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
 
 
 def ensure_output_dir(subdir):
