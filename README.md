@@ -219,7 +219,7 @@ and `eval/privacy_utility.py` (privacy-utility trade-off over an epsilon grid).
 
 The aggregated results the thesis reports are in the repository: one CSV per
 experiment, the verifier outputs, the generated figure data under
-`eval_results/{pm_quality,scaling_plots,stage_breakdown}/`, and
+`eval_results/{scaling_plots,stage_breakdown}/`, and
 `eval_results/ch6_provenance_manifest.json`, which records the SHA-256 of every
 input log, run result, and verifier output behind the evaluation chapter.
 Regenerate the manifest with `python3 eval/write_ch6_provenance.py`.

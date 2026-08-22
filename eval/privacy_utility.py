@@ -158,8 +158,7 @@ def compute_process_model_quality(variants, original_cases_a, original_cases_b):
         original_log.append(trace)
 
     try:
-        # Discover model from variant log (pm4py 2.7 top-level API, consistent
-        # with eval/plotting/e11_pm_quality.py).
+        # Discover model from variant log (pm4py 2.7 top-level API).
         net, im, fm = pm4py.discover_petri_net_inductive(variant_log)
 
         # Token-replay fitness and precision against the original log.

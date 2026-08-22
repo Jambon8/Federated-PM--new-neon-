@@ -51,7 +51,6 @@ data/
 eval_results/*
 !eval_results/*.csv
 !eval_results/*.json
-!eval_results/pm_quality/
 !eval_results/scaling_plots/
 !eval_results/stage_breakdown/
 !eval_results/*/

@@ -10,8 +10,8 @@ numpy==2.2.6
 scipy==1.15.3
 matplotlib==3.10.8
 
-# Process-model quality only (eval/plotting/e11_pm_quality.py). The
-# correctness baseline needs neither: eval/baseline.py reconstructs variants
-# with the standard library alone.
-pandas==2.3.3
+# Process-model fitness and precision in eval/privacy_utility.py, which skips
+# those metrics with a warning when pm4py is absent. The correctness baseline
+# does not need it: eval/baseline.py reconstructs variants with the standard
+# library alone.
 pm4py==2.7.22
