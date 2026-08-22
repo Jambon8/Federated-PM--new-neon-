@@ -30,7 +30,7 @@ RESULTS_ROOT = os.environ.get("NEON_RESULTS_ROOT", os.path.join(PROJECT_ROOT, "e
 RUN_CMD = ["python3", "-u", "examples/run_process_mining.py"]
 
 # Results written before this UTC instant predate the 2026-06-23 Stage-6 reveal
-# changes (commits 845c1d2 at 09:52Z and f6e86f7 at 10:09Z); their timings are
+# changes (commits 533bde9 at 09:52Z and 70e5de9 at 10:09Z); their timings are
 # stale and are dropped from aggregation. The boundary is set just after the
 # later commit: every run from 10:10Z onward (including the morning e7 local
 # rerun) used the new binary. e8b is exempt — its DP variant counts are
@@ -45,64 +45,45 @@ DATA_ROOT = os.environ.get("NEON_DATA_ROOT", "data")
 DEFAULT_THREADS = int(os.environ.get("NEON_THREADS", "16"))
 
 # ---------------------------------------------------------------------------
-# Dataset catalog (verified by /tmp/verify_v2.py against data/Master_Input)
+# Dataset catalog
 # ---------------------------------------------------------------------------
 
-MASTER = f"{DATA_ROOT}/Master_Input"
+# Every log lives at data/<n>parties/<dataset>/party_<i>.<ext>; the two-party
+# logs are the OrgA/OrgB attribute split of a public single-organization log
+# (see data/PROVENANCE.md for the archive each one came from).
+N2 = f"{DATA_ROOT}/2parties"
 
 N2_DATASETS = {
-    "bpi13_incidents":   (f"{MASTER}/OrgA/BPI_Challenge_2013_incidents.xes.gz",
-                          f"{MASTER}/OrgB/BPI_Challenge_2013_incidents.xes.gz"),
-    "bpi13_open":        (f"{MASTER}/OrgA/BPI_Challenge_2013_open_problems.xes.gz",
-                          f"{MASTER}/OrgB/BPI_Challenge_2013_open_problems.xes.gz"),
-    "bpi13_closed":      (f"{MASTER}/OrgA/BPI_Challenge_2013_closed_problems.xes.gz",
-                          f"{MASTER}/OrgB/BPI_Challenge_2013_closed_problems.xes.gz"),
-    "sepsis":            (f"{MASTER}/OrgA/Sepsis_Cases_OrgA.xes.gz",
-                          f"{MASTER}/OrgB/Sepsis_Cases_OrgB.xes.gz"),
-    "requestforpayment": (f"{MASTER}/OrgA/RequestForPayment_OrgA.xes.gz",
-                          f"{MASTER}/OrgB/RequestForPayment_OrgB.xes.gz"),
-    "bpi17_offer":       (f"{MASTER}/OrgA/BPIChallenge2017-Offerlog.xes",
-                          f"{MASTER}/OrgB/BPIChallenge2017-Offerlog.xes"),
-    "bpi12":             (f"{MASTER}/OrgA/BPI_Challenge_2012.xes.gz",
-                          f"{MASTER}/OrgB/BPI_Challenge_2012.xes.gz"),
-    "hospital":          (f"{MASTER}/OrgA/Hospital_log.xes.gz",
-                          f"{MASTER}/OrgB/Hospital_log.xes.gz"),
-    "domestic_decl":     (f"{MASTER}/OrgA/DomesticDeclarations_OrgA.xes.gz",
-                          f"{MASTER}/OrgB/DomesticDeclarations_OrgB.xes.gz"),
-    "international_decl":(f"{MASTER}/OrgA/InternationalDeclarations_OrgA.xes.gz",
-                          f"{MASTER}/OrgB/InternationalDeclarations_OrgB.xes.gz"),
-    "permit":            (f"{MASTER}/OrgA/PermitLog_OrgA.xes.gz",
-                          f"{MASTER}/OrgB/PermitLog_OrgB.xes.gz"),
+    "bpi13_incidents":   (f"{N2}/bpi13_incidents/party_0.xes.gz",
+                          f"{N2}/bpi13_incidents/party_1.xes.gz"),
+    "bpi13_open":        (f"{N2}/bpi13_open/party_0.xes.gz",
+                          f"{N2}/bpi13_open/party_1.xes.gz"),
+    "bpi13_closed":      (f"{N2}/bpi13_closed/party_0.xes.gz",
+                          f"{N2}/bpi13_closed/party_1.xes.gz"),
+    "sepsis":            (f"{N2}/sepsis/party_0.xes.gz",
+                          f"{N2}/sepsis/party_1.xes.gz"),
+    "requestforpayment": (f"{N2}/requestforpayment/party_0.xes.gz",
+                          f"{N2}/requestforpayment/party_1.xes.gz"),
+    "bpi17_offer":       (f"{N2}/bpi17_offer/party_0.xes",
+                          f"{N2}/bpi17_offer/party_1.xes"),
+    "bpi12":             (f"{N2}/bpi12/party_0.xes.gz",
+                          f"{N2}/bpi12/party_1.xes.gz"),
+    "hospital":          (f"{N2}/hospital/party_0.xes.gz",
+                          f"{N2}/hospital/party_1.xes.gz"),
+    "domestic_decl":     (f"{N2}/domestic_decl/party_0.xes.gz",
+                          f"{N2}/domestic_decl/party_1.xes.gz"),
+    "international_decl":(f"{N2}/international_decl/party_0.xes.gz",
+                          f"{N2}/international_decl/party_1.xes.gz"),
+    "permit":            (f"{N2}/permit/party_0.xes.gz",
+                          f"{N2}/permit/party_1.xes.gz"),
 }
 
 # N-way splits for E4 (scaling in number of parties)
 N_WAY_DATASETS = {
-    "bpi13_open": {
-        2: [f"{MASTER}/OrgA/BPI_Challenge_2013_open_problems.xes.gz",
-            f"{MASTER}/OrgB/BPI_Challenge_2013_open_problems.xes.gz"],
-        3: [f"{DATA_ROOT}/split/party_{i}.xes" for i in range(3)],
-        4: [f"{DATA_ROOT}/split_4/party_{i}.xes" for i in range(4)],
-        5: [f"{DATA_ROOT}/split_5/party_{i}.xes" for i in range(5)],
-    },
-    "bpi13_closed": {
-        2: [f"{MASTER}/OrgA/BPI_Challenge_2013_closed_problems.xes.gz",
-            f"{MASTER}/OrgB/BPI_Challenge_2013_closed_problems.xes.gz"],
-        3: [f"{DATA_ROOT}/bpi13_closed/split_3/party_{i}.xes" for i in range(3)],
-        4: [f"{DATA_ROOT}/bpi13_closed/split_4/party_{i}.xes" for i in range(4)],
-        5: [f"{DATA_ROOT}/bpi13_closed/split_5/party_{i}.xes" for i in range(5)],
-    },
-    "bpi13_incidents": {
-        2: list(N2_DATASETS["bpi13_incidents"]),
-        3: [f"{DATA_ROOT}/bpi13_incidents/split_3/party_{i}.xes" for i in range(3)],
-        4: [f"{DATA_ROOT}/bpi13_incidents/split_4/party_{i}.xes" for i in range(4)],
-        5: [f"{DATA_ROOT}/bpi13_incidents/split_5/party_{i}.xes" for i in range(5)],
-    },
-    "sepsis": {
-        2: list(N2_DATASETS["sepsis"]),
-        3: [f"{DATA_ROOT}/sepsis/split_3/party_{i}.xes" for i in range(3)],
-        4: [f"{DATA_ROOT}/sepsis/split_4/party_{i}.xes" for i in range(4)],
-        5: [f"{DATA_ROOT}/sepsis/split_5/party_{i}.xes" for i in range(5)],
-    },
+    name: {n: [f"{DATA_ROOT}/{n}parties/{name}/party_{i}" +
+               (".xes.gz" if n == 2 else ".xes") for i in range(n)]
+           for n in (2, 3, 4, 5)}
+    for name in ("bpi13_open", "bpi13_closed", "bpi13_incidents", "sepsis")
 }
 
 # ---------------------------------------------------------------------------
@@ -216,14 +197,14 @@ def _runs_e4b_scaling_n(reps=3):
     datasets = ("sepsis", "bpi13_incidents")
     args = ["--threshold", "1", "--k-anon", "0", "--force-partial-len", "20"]
     for dset, n, rep in itertools.product(datasets, (2, 3, 4, 5), range(reps)):
-        logs = [f"{DATA_ROOT}/e4b/{dset}/n{n}/party_{i}.xes" for i in range(n)]
+        logs = [f"{DATA_ROOT}/{n}parties/e4b_{dset}_c{C}/party_{i}.xes" for i in range(n)]
         rid = f"e4b__{dset}__N{n}__rep{rep}"
         out.append((rid, list(args), n, logs,
                     {"experiment": "e4b_scaling_n", "dataset": dset, "n_parties": n,
                      "c_cases": C, "partial_len": 20, "control": False, "rep": rep}))
     for dset, n, rep in itertools.product(datasets, (3, 4, 5), range(reps)):
         m = n * C // 2
-        logs = [f"{DATA_ROOT}/e4b/{dset}/ctrl{m}/party_{i}.xes" for i in range(2)]
+        logs = [f"{DATA_ROOT}/2parties/e4b_{dset}_c{m}/party_{i}.xes" for i in range(2)]
         rid = f"e4b__{dset}__ctrlN{n}__rep{rep}"
         out.append((rid, list(args), 2, logs,
                     {"experiment": "e4b_scaling_n", "dataset": dset, "n_parties": 2,

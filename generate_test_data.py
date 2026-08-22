@@ -1,7 +1,7 @@
 """Generate N-party test data by splitting a single XES event log.
 
 Usage:
-    python3 generate_test_data.py input.xes.gz --parties 3 --overlap 0.5 --output-dir data/split/
+    python3 generate_test_data.py input.xes.gz --parties 3 --overlap 0.5 --output-dir data/3parties/mylog/
     python3 generate_test_data.py input.xes.gz --parties 2 --overlap 1.0
 
 Simulates N organizations that share case IDs but each observe different events:
@@ -123,7 +123,8 @@ def main():
     parser.add_argument("--parties", type=int, default=3, help="Number of parties (default: 3)")
     parser.add_argument("--overlap", type=float, default=0.5,
                         help="Fraction of cases in all parties (0.0-1.0, default: 0.5)")
-    parser.add_argument("--output-dir", default="data/split/", help="Output directory (default: data/split/)")
+    parser.add_argument("--output-dir", default="data/3parties/split/",
+                    help="Output directory (default: data/3parties/split/)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
     args = parser.parse_args()
 

@@ -23,7 +23,7 @@ Runs pass --force-partial-len 20 so the encoded width is pinned identically in
 every cell (no truncation occurs: the filter caps local traces at 20 events).
 
 Usage:
-    python3 eval/generate_e4b_splits.py            # writes data/e4b/...
+    python3 eval/generate_e4b_splits.py            # writes data/<n>parties/e4b_*/
 """
 
 import json
@@ -44,13 +44,15 @@ MAX_LEN = 40    # caps the n=2 local trace length at MAX_LEN/2 = 20
 PARTY_COUNTS = (2, 3, 4, 5)
 CONTROL_NS = (3, 4, 5)
 DATA_ROOT = os.environ.get("NEON_DATA_ROOT", "data")
-OUT_ROOT = os.path.join(DATA_ROOT, "e4b")
+# Cells are written as data/<n>parties/e4b_<dataset>_c<cases per party>/.
+def cell_dir(dset, n, cases):
+    return os.path.join(DATA_ROOT, f"{n}parties", f"e4b_{dset}_c{cases}")
 
 DATASETS = {
-    "sepsis": (f"{DATA_ROOT}/Master_Input/OrgA/Sepsis_Cases_OrgA.xes.gz",
-               f"{DATA_ROOT}/Master_Input/OrgB/Sepsis_Cases_OrgB.xes.gz"),
-    "bpi13_incidents": (f"{DATA_ROOT}/Master_Input/OrgA/BPI_Challenge_2013_incidents.xes.gz",
-                        f"{DATA_ROOT}/Master_Input/OrgB/BPI_Challenge_2013_incidents.xes.gz"),
+    "sepsis": (f"{DATA_ROOT}/2parties/sepsis/party_0.xes.gz",
+               f"{DATA_ROOT}/2parties/sepsis/party_1.xes.gz"),
+    "bpi13_incidents": (f"{DATA_ROOT}/2parties/bpi13_incidents/party_0.xes.gz",
+                        f"{DATA_ROOT}/2parties/bpi13_incidents/party_1.xes.gz"),
 }
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -112,7 +114,7 @@ def main():
                 rows = [(cid, deal(joint[cid], n, p)) for cid in sample]
                 assert all(evs for _, evs in rows), f"{dset} n={n}: empty local trace"
                 max_local = max(max_local, max(len(evs) for _, evs in rows))
-                write_party_xes(os.path.join(OUT_ROOT, dset, f"n{n}", f"party_{p}.xes"), rows)
+                write_party_xes(os.path.join(cell_dir(dset, n, C_CASES), f"party_{p}.xes"), rows)
             assert max_local <= MAX_LEN // 2
             dmeta["cells"][f"n{n}"] = {"cases_per_party": C_CASES, "max_local_len": max_local,
                                        "total_rows": n * C_CASES}
@@ -130,7 +132,7 @@ def main():
                 rows = [(cid, deal(joint[cid.split("#dup")[0]], 2, p)) for cid in ctrl_ids]
                 assert all(evs for _, evs in rows)
                 max_local = max(max_local, max(len(evs) for _, evs in rows))
-                write_party_xes(os.path.join(OUT_ROOT, dset, f"ctrl{m}", f"party_{p}.xes"), rows)
+                write_party_xes(os.path.join(cell_dir(dset, 2, m), f"party_{p}.xes"), rows)
             assert max_local <= MAX_LEN // 2
             dmeta["cells"][f"ctrl{m}"] = {"cases_per_party": m, "max_local_len": max_local,
                                           "total_rows": 2 * m, "matched_n": n}
@@ -138,7 +140,7 @@ def main():
 
         meta["datasets"][dset] = dmeta
 
-    meta_path = os.path.join(OUT_ROOT, "e4b_meta.json")
+    meta_path = os.path.join(DATA_ROOT, "e4b_meta.json")
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
     print(f"Wrote {meta_path}")

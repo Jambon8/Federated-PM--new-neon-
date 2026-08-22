@@ -10,8 +10,8 @@
 #        NEON_THREADS=8 \
 #        bash eval/run_e7_local.sh
 #
-# Reads NEON_DATA_ROOT automatically as <repo-root>/data (the location of
-# Master_Input on a local checkout). NEON_THREADS defaults to 8.
+# Reads NEON_DATA_ROOT automatically as <repo-root>/data (the location of the
+# per-party-count log tree on a local checkout). NEON_THREADS defaults to 8.
 #
 # What it does:
 #   1. Cleans any stale network namespaces (idempotent).
@@ -35,15 +35,15 @@ fi
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-# On a local checkout the raw logs live at <repo>/data/Master_Input.
-# On the CLAIX cluster they live at $HOME/Master_Input. Default to local.
+# On a local checkout the logs live at <repo>/data/<n>parties/.
+# On the CLAIX cluster they live at $HOME/<n>parties/. Default to local.
 : "${NEON_DATA_ROOT:=$REPO/data}"
 : "${NEON_THREADS:=8}"
 export NEON_DATA_ROOT NEON_THREADS
 
 # Verify the expected data layout — fail fast if not.
-if [[ ! -d "$NEON_DATA_ROOT/Master_Input" ]]; then
-    echo "ERROR: expected $NEON_DATA_ROOT/Master_Input/. Set NEON_DATA_ROOT correctly." >&2
+if [[ ! -d "$NEON_DATA_ROOT/2parties" ]]; then
+    echo "ERROR: expected $NEON_DATA_ROOT/2parties/. Set NEON_DATA_ROOT correctly." >&2
     exit 1
 fi
 

@@ -13,7 +13,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from thesis_experiments import N2_DATASETS, N_WAY_DATASETS
+from thesis_experiments import all_runs
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +30,8 @@ RESULT_DIRS = (
     "e8b_dp_delta",
     "e9_kanonymity",
     "e10_protocols",
+    "e3_grid",
+    "e4b_scaling_n",
 )
 AUDIT_FILES = (
     "eval/verify_e1_independent.py",
@@ -38,6 +40,10 @@ AUDIT_FILES = (
     "eval_results/e1_independent_correctness.json",
     "eval_results/e4_split_stats.json",
     "eval_results/e10_output_equivalence.json",
+    "eval/verify_e4b_outputs.py",
+    "eval_results/e4b_output_equivalence.json",
+    "eval/verify_dp_calibration.py",
+    "eval_results/dp_calibration_verification.json",
 )
 
 
@@ -60,13 +66,11 @@ def _git(*args: str) -> str:
 
 
 def main() -> None:
-    input_paths = {Path(path) for pair in N2_DATASETS.values() for path in pair}
-    input_paths.update(
-        Path(path)
-        for datasets in N_WAY_DATASETS.values()
-        for paths in datasets.values()
-        for path in paths
-    )
+    # Every log any registered run reads, so a layout change cannot silently
+    # drop a dataset from the manifest.
+    input_paths = {
+        Path(path) for _rid, _args, _n, logs, _meta in all_runs() for path in logs
+    }
     raw_results = {
         path
         for directory in RESULT_DIRS

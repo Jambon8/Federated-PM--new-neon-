@@ -30,17 +30,17 @@ python3 setup.py install-mpspdz
 
 ```bash
 python3 examples/run_process_mining.py \
-  --log-a data/Master_Input/OrgA/BPI_Challenge_2013_open_problems.xes.gz \
-  --log-b data/Master_Input/OrgB/BPI_Challenge_2013_open_problems.xes.gz
+  --log-a data/2parties/bpi13_open/party_0.xes.gz \
+  --log-b data/2parties/bpi13_open/party_1.xes.gz
 ```
 
 For more than two parties, pass one log per party:
 
 ```bash
 python3 examples/run_process_mining.py --logs \
-  data/bpi13_open/split_3/party_0.xes \
-  data/bpi13_open/split_3/party_1.xes \
-  data/bpi13_open/split_3/party_2.xes
+  data/3parties/bpi13_open/party_0.xes \
+  data/3parties/bpi13_open/party_1.xes \
+  data/3parties/bpi13_open/party_2.xes
 ```
 
 ### Inputs
@@ -92,20 +92,20 @@ The default regime filters on frequency. Differential privacy is an optional str
 ```bash
 # k-anonymity at k = 5
 python3 examples/run_process_mining.py \
-  --log-a data/Master_Input/OrgA/Sepsis_Cases_OrgA.xes.gz \
-  --log-b data/Master_Input/OrgB/Sepsis_Cases_OrgB.xes.gz \
+  --log-a data/2parties/sepsis/party_0.xes.gz \
+  --log-b data/2parties/sepsis/party_1.xes.gz \
   --threshold 5 --k-anon 1
 
 # (eps, delta)-differentially private release
 python3 examples/run_process_mining.py \
-  --log-a data/Master_Input/OrgA/Sepsis_Cases_OrgA.xes.gz \
-  --log-b data/Master_Input/OrgB/Sepsis_Cases_OrgB.xes.gz \
+  --log-a data/2parties/sepsis/party_0.xes.gz \
+  --log-b data/2parties/sepsis/party_1.xes.gz \
   --enable-dp 1 --epsilon 1.0 --dp-delta 0.001
 
 # Simulated WAN
 sudo -E python3 examples/run_process_mining.py \
-  --log-a data/Master_Input/OrgA/RequestForPayment_OrgA.xes.gz \
-  --log-b data/Master_Input/OrgB/RequestForPayment_OrgB.xes.gz \
+  --log-a data/2parties/requestforpayment/party_0.xes.gz \
+  --log-b data/2parties/requestforpayment/party_1.xes.gz \
   --mode local-virtual --network wan-fast
 ```
 
@@ -136,9 +136,13 @@ some_command | python3 decode_output.py
 
 ## Datasets
 
-`data/` holds every event log the evaluation measures. The two-party logs are synthetic federations of public single-organization logs from the [4TU](https://data.4tu.nl/) and BPI Challenge archives: each log is split into an `OrgA` and an `OrgB` partition on a case attribute, so both partitions describe the same cases from different organizational perspectives. The three-, four-, and five-party splits under `data/bpi13_open/`, `data/bpi13_closed/`, `data/bpi13_incidents/`, `data/sepsis/`, and `data/e4b/` are derived from the same logs round-robin. Cite the original archive entry when reusing a log.
+`data/` is organized by party count: `data/2parties/`, `data/3parties/`, `data/4parties/`, and `data/5parties/`, each holding one directory per dataset with exactly one log per party (`party_0`, `party_1`, ...). Only the datasets the evaluation measures are kept.
 
-Logs the experiment registry never reads are not tracked. New logs are ignored by default, so add one explicitly:
+The two-party logs are synthetic federations of public single-organization logs from the [4TU](https://data.4tu.nl/) and BPI Challenge archives: each log is split into two partitions on a case attribute, so both describe the same cases from different organizational perspectives. The three-, four-, and five-party logs derive from the same sources round-robin. The `e4b_*` directories hold the controlled scaling study, named for their cases per party: `e4b_sepsis_c500` runs at 2 to 5 parties, and `e4b_sepsis_c750`, `_c1000`, `_c1250` are its two-party controls, matched on total row count. `data/e4b_meta.json` records how they were built.
+
+[data/PROVENANCE.md](data/PROVENANCE.md) maps every dataset directory to the archive entry it came from. Cite that entry when reusing a log.
+
+Only logs the experiment registry reads are tracked. New logs are ignored by default, so add one explicitly:
 
 ```bash
 git add -f data/<path>
@@ -185,7 +189,7 @@ python3 -m unittest discover -s tests
 │   └── dp_calibration.py            # (eps, delta) -> threshold calibration
 ├── eval/                            # Experiment registry, runners, plotting
 ├── tests/                           # Unit tests
-├── data/                            # Event logs
+├── data/<n>parties/<dataset>/       # Event logs, one per party
 ├── setup.py                         # MP-SPDZ installation
 ├── temp/MP/mp-spdz-0.4.2/           # MP-SPDZ (installed, not tracked)
 └── Player-Data/                     # Runtime I/O (inputs, outputs, keys)

@@ -62,15 +62,15 @@ sys.path.insert(0, ROOT)
 
 
 DATASET_LOG_PATH = {
-    "bpi13_incidents":   "data/Master_Input/OrgA/BPI_Challenge_2013_incidents.xes.gz",
-    "sepsis":            "data/Master_Input/OrgA/Sepsis_Cases_OrgA.xes.gz",
-    "requestforpayment": "data/Master_Input/OrgA/RequestForPayment_OrgA.xes.gz",
-    "bpi12":             "data/Master_Input/OrgA/BPI_Challenge_2012.xes.gz",
-    "international_decl":"data/Master_Input/OrgA/InternationalDeclarations_OrgA.xes.gz",
-    "domestic_decl":     "data/Master_Input/OrgA/DomesticDeclarations_OrgA.xes.gz",
-    "hospital":          "data/Master_Input/OrgA/Hospital_log.xes.gz",
-    "permit":            "data/Master_Input/OrgA/PermitLog_OrgA.xes.gz",
-    "bpi17_offer":       "data/Master_Input/OrgA/BPIChallenge2017-Offerlog.xes",
+    "bpi13_incidents":   "data/2parties/bpi13_incidents/party_0.xes.gz",
+    "sepsis":            "data/2parties/sepsis/party_0.xes.gz",
+    "requestforpayment": "data/2parties/requestforpayment/party_0.xes.gz",
+    "bpi12":             "data/2parties/bpi12/party_0.xes.gz",
+    "international_decl":"data/2parties/international_decl/party_0.xes.gz",
+    "domestic_decl":     "data/2parties/domestic_decl/party_0.xes.gz",
+    "hospital":          "data/2parties/hospital/party_0.xes.gz",
+    "permit":            "data/2parties/permit/party_0.xes.gz",
+    "bpi17_offer":       "data/2parties/bpi17_offer/party_0.xes",
 }
 
 

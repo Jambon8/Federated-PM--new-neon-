@@ -20,7 +20,8 @@ if str(ROOT) not in sys.path:
 import import_xes
 
 
-DATA = ROOT / "data" / "e4b"
+DATA = ROOT / "data"
+C_CASES = 500
 RESULTS = ROOT / "eval_results" / "e4b_scaling_n"
 OUTPUT = ROOT / "eval_results" / "e4b_output_equivalence.json"
 DATASETS = ("bpi13_incidents", "sepsis")
@@ -92,7 +93,7 @@ def main() -> None:
         dataset_report = {}
         reference = None
         for n in PARTY_COUNTS:
-            paths = [DATA / dataset / f"n{n}" / f"party_{party}.xes"
+            paths = [DATA / f"{n}parties" / f"e4b_{dataset}_c{C_CASES}" / f"party_{party}.xes"
                      for party in range(n)]
             expected = centralized_release(paths)
             if reference is None:
