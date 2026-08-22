@@ -1,0 +1,17 @@
+# Reproducing the evaluation and the figures.
+# Install with: python3 -m pip install -r requirements-eval.txt
+#
+# Adds the analysis stack on top of the runtime requirements.
+
+-r requirements.txt
+
+# Statistics and figures
+numpy==2.2.6
+scipy==1.15.3
+matplotlib==3.10.8
+
+# Process-model quality only (eval/plotting/e11_pm_quality.py). The
+# correctness baseline needs neither: eval/baseline.py reconstructs variants
+# with the standard library alone.
+pandas==2.3.3
+pm4py==2.7.22

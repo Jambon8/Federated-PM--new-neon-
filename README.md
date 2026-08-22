@@ -8,19 +8,40 @@ This is the implementation artifact of a master's thesis at the [PADS](https://w
 
 ---
 
-## Requirements
+## Installation
 
-- Python 3.10+
-- `tqdm` — required by the NEON runtime
-- `flask` — web UI only
-- `pm4py`, `scipy`, `pandas`, `matplotlib` — evaluation harness and figures only
-- MP-SPDZ 0.4.2
+Python 3.10 or newer, plus `zstd` on the system path (NEON compresses its run
+archives with it).
 
-MP-SPDZ is not vendored. Install it into `vendor/temp/MP/mp-spdz-0.4.2/` with:
+```bash
+python3 -m venv fed_env
+source fed_env/bin/activate
+pip install -r requirements.txt        # protocol + web UI
+pip install -r requirements-eval.txt   # adds the evaluation stack
+```
+
+The virtual environment is not optional on distributions that mark the system
+interpreter as externally managed. Pinned versions are the ones every
+measurement in the thesis was taken with.
+
+MP-SPDZ 0.4.2 is not vendored. Install it into `vendor/temp/MP/mp-spdz-0.4.2/`:
 
 ```bash
 python3 vendor/setup.py install-mpspdz
 ```
+
+Check the install by running the protocol on two of the included logs:
+
+```bash
+python3 pipeline/run.py \
+  --log-a data/2parties/bpi13_open/party_0.xes.gz \
+  --log-b data/2parties/bpi13_open/party_1.xes.gz \
+  --threshold 5
+```
+
+This releases 16 trace variants from 635 joint cases. The first run compiles the
+MPC program, which takes a few seconds; later runs with the same program reuse
+the compiled binary.
 
 ---
 
@@ -152,18 +173,51 @@ git add -f data/<path>
 
 ## Evaluation
 
-`eval/thesis_experiments.py` is the experiment registry; every reported measurement resolves to an entry there.
+`eval/thesis_experiments.py` is the experiment registry: every measurement
+reported in the thesis resolves to one run ID there. A run is executed by ID and
+writes one JSON file per run under `eval_results/<experiment>/`.
 
 ```bash
-python3 eval/thesis_experiments.py --list   # registered experiments
-python3 eval/thesis_experiments.py --experiment e2   # run one experiment
-python3 eval/correctness.py                 # MPC output vs centralized pm4py baseline
-python3 eval/dp_evaluation.py               # DP correctness, statistics, cost
-python3 eval/privacy_utility.py             # privacy-utility trade-off over an epsilon grid
-python3 eval/plotting/plot_performance.py   # figures
+python3 eval/thesis_experiments.py --count       # runs per experiment
+python3 eval/thesis_experiments.py --list        # one shell command per run
+python3 eval/thesis_experiments.py --list --experiment e2   # just one experiment
+python3 eval/thesis_experiments.py --run e1__bpi13_open__default__rep0
+python3 eval/thesis_experiments.py --aggregate   # collect the JSONs into one CSV per experiment
 ```
 
-Results are written to `eval_results/` and are not tracked. The harness targets local execution.
+The full registry is 888 runs. `--list` prints them so a subset can be selected
+or fed to a job scheduler; `--aggregate` then reduces whatever completed into
+`eval_results/<experiment>.csv`, which is what the tables and figures read.
+
+Correctness is checked independently of the harness, by reconstructing the
+expected release from the party logs directly and comparing it against the
+stored MPC output:
+
+```bash
+python3 eval/verify_e1_independent.py   # variants and counts vs the two local logs
+python3 eval/verify_e4_splits.py        # N-party splits match their generator
+python3 eval/verify_e4b_outputs.py      # every party count releases the same variants
+python3 eval/verify_e10_outputs.py      # the three protocols release identically
+python3 eval/verify_dp_calibration.py   # calibrated k against the sampler's grid
+```
+
+Figures are generated from the aggregated CSVs:
+
+```bash
+python3 eval/plotting/plot_performance.py
+python3 eval/plotting/plot_scaling.py
+python3 eval/plotting/plot_dp.py
+python3 eval/plotting/plot_privacy.py
+```
+
+Standalone drivers exist for individual studies outside the registry:
+`eval/correctness.py` (MPC output against the centralized baseline in
+`eval/baseline.py`), `eval/dp_evaluation.py` (DP correctness, statistics, cost),
+and `eval/privacy_utility.py` (privacy-utility trade-off over an epsilon grid).
+
+`eval_results/ch6_provenance_manifest.json` records the SHA-256 of every input
+log, run result, and verifier output behind the evaluation chapter. Regenerate
+it with `python3 eval/write_ch6_provenance.py`.
 
 ---
 
@@ -194,6 +248,8 @@ everything under `vendor/` was written by someone else.
 │   └── templates/, static/
 ├── eval/                            # Experiment registry, runners, plotting
 ├── tests/                           # Unit tests
+├── requirements.txt                 # Protocol + web UI
+├── requirements-eval.txt            # Adds the evaluation stack
 ├── data/<n>parties/<dataset>/       # Event logs, one per party
 ├── docs/                            # Design notes behind Chapters 4 and 5
 │

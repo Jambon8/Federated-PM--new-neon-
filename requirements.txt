@@ -1,0 +1,13 @@
+# Running the protocol and the web UI.
+# Install with: python3 -m pip install -r requirements.txt
+#
+# Versions are the ones every measurement in the thesis was taken with.
+# Python 3.10 or newer.
+
+# NEON runtime (vendor/ProgramFiles) and its MP-SPDZ installer
+tqdm==4.67.1
+sympy==1.14.0
+requests==2.32.3
+
+# Web UI (web/app.py)
+flask==3.1.2
