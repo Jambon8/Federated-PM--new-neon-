@@ -2,6 +2,12 @@
 fed_env/
 .deps/
 
+# Screenshot capture scratch: the profile it hands to headless Chrome, and the
+# saved protocol output it renders instead of holding an hour-long run open in
+# a browser tab. The images themselves are tracked; these are regenerated.
+web/screenshots/.chrome-profile/
+web/screenshots/.runs/
+
 # Python cache
 __pycache__/
 *.pyc

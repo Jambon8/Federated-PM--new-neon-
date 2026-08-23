@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Process Mining</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
 </head>
 
 <body>
@@ -158,7 +159,8 @@
                             <thead>
                                 <tr>
                                     <th class="num" style="width:62px">Count</th>
-                                    <th class="num" style="width:62px">Share</th>
+                                    <th class="num" style="width:62px"
+                                        title="Share of the cases in the released variants">Share</th>
                                     <th>Trace</th>
                                 </tr>
                             </thead>
@@ -573,7 +575,7 @@
             if (hasFingerprints(results)) renderRevealControls(parties);
 
             document.getElementById('variantMeta').textContent =
-                `${traces.length} variants · ${CURRENT_CASES} cases`;
+                `${traces.length} variants · ${CURRENT_CASES} cases released`;
             renderTable(results);
         }
 
@@ -595,7 +597,7 @@
             const b = data.benchmarks || {};
             const tiles = [
                 [variantCount, 'Variants released'],
-                [CURRENT_CASES, 'Shared cases'],
+                [CURRENT_CASES, 'Cases released'],
                 [formatMB(b['Data Sent (Party 0)']), 'Sent by party 0'],
                 [formatMB(b['Global Data Sent']), 'All parties'],
                 [b['Total Rounds'] !== undefined ? formatCount(b['Total Rounds']) : '—', 'Rounds']
@@ -817,7 +819,7 @@
                 '<tr><td colspan="3" class="hint">No run yet.</td></tr>';
             const row = document.getElementById('tilesRow');
             row.innerHTML = '';
-            ['Variants released', 'Shared cases', 'Sent by party 0', 'All parties', 'Rounds']
+            ['Variants released', 'Cases released', 'Sent by party 0', 'All parties', 'Rounds']
                 .forEach(label => {
                     const el = document.createElement('div');
                     el.className = 'tile';

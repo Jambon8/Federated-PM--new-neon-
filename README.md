@@ -161,6 +161,35 @@ python3 web/app.py
 
 Open `http://localhost:8000`. The UI exposes the same options as the CLI, browses for log files, and streams output live.
 
+![The web UI after one run](web/screenshots/run_summary.png)
+
+A finished run: the released variants with their counts on the left, the six
+pipeline stages with runtime, rounds, and bytes sent on the right, and the
+configuration the MPC program itself echoed back, down to the command line that
+produced it.
+
+Each of the three optional features carries its own panel, and the differential
+privacy panel calibrates the release cutoff while the form is being filled in.
+
+![The optional features](web/screenshots/optional_features.png)
+
+Handover collapse hides which internal activities a party performed. The release
+labels those runs `Fingerprint_<digest>`; a party holding the reversal table
+expands its own runs back to activity sequences, and no other party's runs move.
+
+![Fingerprints as released](web/screenshots/handover_fingerprints.png)
+![The same release with party 0 revealed](web/screenshots/handover_revealed.png)
+
+The partial order strategy releases events that share a timestamp as one
+concurrent step rather than in an arbitrary order. In the sepsis log the
+simultaneous laboratory tests appear in brackets:
+
+![Concurrent steps in the release](web/screenshots/partial_orders.png)
+
+Regenerate every image after a UI change with
+`python3 web/screenshots/capture.py` (`--list` names the shots). Each one comes
+from a real run, so the first partial order capture pays a long compile.
+
 ---
 
 ## Output
@@ -292,7 +321,8 @@ everything under `vendor/` was written by someone else.
 │   └── generate_test_data.py        #   N-party splits from one log
 ├── web/                             # Browser tool
 │   ├── app.py, api_helper.py        #   Flask server and output parsing
-│   └── templates/, static/
+│   ├── templates/, static/
+│   └── screenshots/                 #   README images and the script that takes them
 ├── eval/                            # The evaluation
 │   ├── registry.py                  #   every reported run, by id
 │   ├── verify/                      #   independent correctness checks
