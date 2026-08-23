@@ -219,7 +219,7 @@ python3 eval/verify/correctness.py   # variants and counts vs the two local logs
 python3 eval/verify/splits.py        # N-party splits match their generator
 python3 eval/verify/party_count.py      # every party count releases the same variants
 python3 eval/verify/backends.py      # the three protocols release identically
-python3 eval/verify/dp_calibration.py   # calibrated k against the sampler's grid
+python3 eval/verify/dp_calibration.py   # calibrated k, thresholds, and sampler grid
 ```
 
 The thesis includes three figures, each with its own generator:
@@ -282,7 +282,6 @@ everything under `vendor/` was written by someone else.
 │   ├── figures/                     #   the thesis figures
 │   ├── prepare/                     #   split generation, precompilation
 │   └── provenance.py                #   SHA-256 manifest
-├── tests/                           # Unit tests for the DP calibration
 ├── requirements.txt                 # Protocol + web UI
 ├── requirements-eval.txt            # Adds the evaluation stack
 ├── data/<n>parties/<dataset>/       # Event logs, one per party

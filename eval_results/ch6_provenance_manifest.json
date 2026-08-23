@@ -1,7 +1,7 @@
 {
   "scope": "Snapshot of files inspected for the Chapter 6 evidence audit; not proof of the source revision used by historical runs.",
-  "generated_at": "2026-08-22T22:18:31.528105+00:00",
-  "audit_git_revision": "02c85ffef1d6f80298f062d38e7338340fc66773",
+  "generated_at": "2026-08-23T08:06:07.750006+00:00",
+  "audit_git_revision": "c1dbffef9343d2e00f644104766c81a2059974ca",
   "audit_worktree_dirty": true,
   "inputs": [
     {
@@ -3870,8 +3870,8 @@
     },
     {
       "path": "eval/verify/dp_calibration.py",
-      "bytes": 3742,
-      "sha256": "7c5ee9bdfbc3afae1f667bc2aa110a426a04267ea08356b30feb7a82580eb735"
+      "bytes": 7195,
+      "sha256": "9e2db32c0891ece4aa71b49908837612c3c6341bb77ef2e04ed5842554aa085b"
     },
     {
       "path": "eval/verify/party_count.py",
@@ -3885,8 +3885,8 @@
     },
     {
       "path": "eval_results/dp_calibration_verification.json",
-      "bytes": 14515,
-      "sha256": "a185bfda6db32030a94c0be42734a70e8988ca524ba5055219db07fe0c814f66"
+      "bytes": 20993,
+      "sha256": "720dfa302f8f4480ea330b782077d0c3e11e025554616ece9a206e4dff0fa019"
     },
     {
       "path": "eval_results/e10_output_equivalence.json",
