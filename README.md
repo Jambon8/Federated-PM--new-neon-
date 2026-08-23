@@ -8,6 +8,27 @@ This is the implementation artifact of a master's thesis at the [PADS](https://w
 
 ---
 
+## Contents
+
+- [Installation](#installation)
+- [Running from the command line](#running-from-the-command-line)
+  - [Inputs](#inputs)
+  - [Release regime](#release-regime)
+  - [Protocol and execution](#protocol-and-execution)
+  - [Optional features](#optional-features)
+  - [Examples](#examples)
+- [Running the web UI](#running-the-web-ui)
+- [Output](#output)
+- [Datasets](#datasets)
+- [Evaluation](#evaluation)
+  - [Verifying correctness](#verifying-correctness)
+  - [Figures](#figures)
+  - [What is tracked](#what-is-tracked)
+- [File structure](#file-structure)
+- [License](#license)
+
+---
+
 ## Installation
 
 Python 3.10 or newer, plus `zstd` on the system path (NEON compresses its run
@@ -210,22 +231,26 @@ Result directories carry the vocabulary of the evaluation chapter:
 Run identifiers keep their original short form, so `--run` arguments and the
 stored records read the same as when they were measured.
 
+### Verifying correctness
+
 Correctness is checked independently of the harness, by reconstructing the
 expected release from the party logs directly and comparing it against the
 stored MPC output:
 
 ```bash
-python3 eval/verify/correctness.py   # variants and counts vs the two local logs
-python3 eval/verify/splits.py        # N-party splits match their generator
-python3 eval/verify/party_count.py      # every party count releases the same variants
-python3 eval/verify/backends.py      # the three protocols release identically
-python3 eval/verify/dp_calibration.py   # calibrated k, thresholds, and sampler grid
+python3 eval/verify/correctness.py     # variants and counts vs the two local logs
+python3 eval/verify/splits.py          # N-party splits match their generator
+python3 eval/verify/party_count.py     # every party count releases the same variants
+python3 eval/verify/backends.py        # the three protocols release identically
+python3 eval/verify/dp_calibration.py  # calibrated k, thresholds, and sampler grid
 ```
+
+### Figures
 
 The thesis includes three figures, each with its own generator:
 
 ```bash
-python3 eval/figures/dataset_stats.py       # dataset_stats.csv, then:
+python3 eval/figures/dataset_stats.py  # dataset_stats.csv, then:
 python3 eval/figures/dataset_sizes.py  # -> dataset_sizes.pdf
 python3 eval/figures/stage_profile.py  # -> stage_profile.pdf
 python3 eval/figures/scaling.py        # -> fig_e3_controlled_grid.pdf
@@ -248,14 +273,6 @@ What the repository carries is exactly what the thesis reports, plus whatever
 produces it. Studies that never reached the thesis, superseded runs, and
 diagnostics whose output no chapter carries stay local; `.gitignore` names each
 one and why.
-
----
-
-## Tests
-
-```bash
-python3 -m unittest discover -s tests
-```
 
 ---
 
