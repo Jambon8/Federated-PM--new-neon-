@@ -28,6 +28,11 @@ AGENTS.md
 # Thesis sources, advisor feedback, and third-party reference theses
 Thesis/
 
+# Internal design notes. They record how the protocol was arrived at, not what
+# it does; the thesis chapters are the published account and have moved past
+# them. Kept locally as a development record.
+docs/
+
 # Event logs. Ignored by default so that a stray multi-gigabyte log never
 # lands in a commit; the logs Chapter 6 actually measures are tracked
 # explicitly and stay tracked. Add a new one with: git add -f <path>

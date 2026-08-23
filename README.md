@@ -282,11 +282,10 @@ everything under `vendor/` was written by someone else.
 │   ├── figures/                     #   the thesis figures
 │   ├── prepare/                     #   split generation, precompilation
 │   └── provenance.py                #   SHA-256 manifest
-├── tests/                           # Unit tests
+├── tests/                           # Unit tests for the DP calibration
 ├── requirements.txt                 # Protocol + web UI
 ├── requirements-eval.txt            # Adds the evaluation stack
 ├── data/<n>parties/<dataset>/       # Event logs, one per party
-├── docs/                            # Design notes behind Chapters 4 and 5
 │
 ├── vendor/                          # Not ours — see vendor/NEON.md
 │   ├── ProgramFiles/                #   NEON (Klinger et al., CODASPY 2024)
